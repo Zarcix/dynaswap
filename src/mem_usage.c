@@ -1,12 +1,22 @@
-#include "sys/sysinfo.h"
-
-struct sysinfo memInfo;
+#include "libproc2/meminfo.h"
+#include <stdlib.h>
 
 float poll_mem_usage() {
-    sysinfo(&memInfo);
+    struct meminfo_info* meminfo = NULL;
+    struct meminfo_result* res = NULL;
+    procps_meminfo_new(&meminfo);
 
-    unsigned long total_mem = memInfo.totalram + memInfo.totalswap;
-    unsigned long used_mem = memInfo.totalram + memInfo.totalswap - memInfo.freeram - memInfo.freeswap;
+    res = procps_meminfo_get(meminfo, MEMINFO_MEM_TOTAL);
+    unsigned long total_vram = res->result.ul_int;
+    res = procps_meminfo_get(meminfo, MEMINFO_SWAP_TOTAL);
+    total_vram += res->result.ul_int;
 
-    return (float)used_mem / (float)total_mem;
+    res = procps_meminfo_get(meminfo, MEMINFO_MEM_AVAILABLE);
+    unsigned long vram_used = res->result.ul_int;
+    res = procps_meminfo_get(meminfo, MEMINFO_SWAP_FREE);
+    vram_used += res->result.ul_int;
+
+    procps_meminfo_unref(&meminfo);
+
+    return 1.0 - ((float)vram_used / (float)total_vram);
 }

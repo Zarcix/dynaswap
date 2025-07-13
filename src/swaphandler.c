@@ -16,8 +16,7 @@
 #include "swapheader.h"
 
 void init_dynamic_swap() {
-    prog_swap.swap_chunks = NULL;
-    prog_swap.chunk_number = 0;
+    prog_swap = NULL;
 }
 
 void mkswap(int swapFD) {
@@ -40,7 +39,6 @@ void mkswap(int swapFD) {
     uuid_generate(swapHeader.uuid);
     write(swapFD, swapHeader.uuid, sizeof(swapHeader.uuid));
 
-    snprintf(swapHeader.volume_name, SWAP_LABEL_LENGTH, "%d", prog_swap.chunk_number);
     write(swapFD, swapHeader.volume_name, sizeof(swapHeader.volume_name));
 
     lseek(swapFD, SWAP_SIGNATURE_OFFSET, SEEK_SET);
@@ -48,12 +46,13 @@ void mkswap(int swapFD) {
 }
 
 void allocate_swap() {
-    int new_chunk = prog_swap.chunk_number + 1;
+    int new_chunk = 0;
+    if (prog_swap != NULL) {
+        new_chunk = prog_swap->chunk_number + 1;
+    }
     char fileName[PATH_MAX];
     snprintf(fileName, sizeof(fileName), SWAP_PATH, new_chunk);
-    
-    char* filePath = malloc(sizeof(char) * strlen(fileName));
-    strncpy(filePath, fileName, strlen(fileName));
+    char* filePath = strdup(fileName);
 
     FILE* swapFile = fopen(filePath, "w+");
     int swapFD = fileno(swapFile);
@@ -63,21 +62,40 @@ void allocate_swap() {
 
     fclose(swapFile);
 
+    errno = 0;
     int swapon_stat = swapon(filePath, SWAP_FLAG_PREFER);
     if (swapon_stat != 0) {
         printf("Swap allocation ran into an error: %d\n", errno);
     }
 
-    struct MemoryChunk* swap_info = malloc(sizeof(struct MemoryChunk));
-    swap_info->file_path = filePath;
-    swap_info->file_handler = NULL;
-    swap_info->previous_chunk = prog_swap.swap_chunks;
+    struct MemoryChunk* swap_chunk = malloc(sizeof(struct MemoryChunk));
+    swap_chunk->chunk_number = new_chunk;
+    swap_chunk->previous_chunk = prog_swap;
+    swap_chunk->file_path = filePath;
 
-    prog_swap.chunk_number = new_chunk;
-    prog_swap.swap_chunks = swap_info;
-
+    prog_swap = swap_chunk;
 }
 
 void free_swap() {
+    if (prog_swap == NULL) {
+        return;
+    }
 
+    struct MemoryChunk* current_chunk = prog_swap;
+
+    errno = 0;
+    int swapoff_stat = swapoff(current_chunk->file_path);
+    if (swapoff_stat != 0) {
+        printf("Swap Freeing ran into an error: %d\n", errno);
+    }
+
+    errno = 0;
+    int rm_stat = remove(current_chunk->file_path);
+    if (rm_stat != 0) {
+        printf("Removing swap file ran into an error: %d\n", errno);
+    }
+
+    struct MemoryChunk* previous_chunk = prog_swap->previous_chunk;
+
+    prog_swap = previous_chunk;
 }

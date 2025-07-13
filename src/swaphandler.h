@@ -12,18 +12,12 @@
 #include <linux/limits.h>
 
 struct MemoryChunk {
+    int chunk_number;
     char* file_path;
-    FILE* file_handler;
     struct MemoryChunk* previous_chunk;
 };
 
-struct MemoryHandler {
-    // Implemented as a stack
-    int chunk_number;
-    struct MemoryChunk* swap_chunks;
-};
-
-static struct MemoryHandler prog_swap;
+static struct MemoryChunk* prog_swap;
 
 void init_dynamic_swap();
 

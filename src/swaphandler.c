@@ -20,7 +20,7 @@ void init_dynamic_swap() {
 }
 
 void mkswap(int swapFD) {
-    struct swap_header_v1_2 swapHeader;
+    struct swap_header_v1_2 swapHeader = {0};
 
     for (int i = 0; i < sizeof(swapHeader.bootbits); i++) {
         swapHeader.bootbits[i] = '\0';
@@ -95,7 +95,10 @@ void free_swap() {
         printf("Removing swap file ran into an error: %d\n", errno);
     }
 
-    struct MemoryChunk* previous_chunk = prog_swap->previous_chunk;
+    struct MemoryChunk* previous_chunk = current_chunk->previous_chunk;
 
     prog_swap = previous_chunk;
+
+    free(current_chunk->file_path);
+    free(current_chunk);
 }

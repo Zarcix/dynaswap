@@ -8,12 +8,36 @@
 #include <errno.h>
 #include <linux/limits.h>
 #include <fcntl.h>
+#include <sys/stat.h>
 #include <unistd.h>
 #include <byteswap.h>
 #include <uuid/uuid.h>
+#include <signal.h>
 
 #include "swaphandler.h"
 #include "swapheader.h"
+
+/* Helpers */
+
+uint32_t mkswap_get_last_page(int swapFD) {
+    struct stat swapst;
+    if (fstat(swapFD, &swapst) != 0) {
+        perror("mkswap failed: cannot read swap file !! fstat");
+        exit(SIGABRT);
+    }
+
+    off_t swap_size = swapst.st_size;
+    if (swap_size < SWAP_PAGE_SIZE) {
+        perror("mkswap failed: file too small || swap_size");
+        exit(SIGABRT);
+    }
+
+    uint32_t last_page = (swap_size / SWAP_PAGE_SIZE) - 1;
+
+    return last_page;
+}
+
+/* Func Defs */
 
 void init_dynamic_swap() {
     prog_swap = NULL;
@@ -21,24 +45,21 @@ void init_dynamic_swap() {
 
 void mkswap(int swapFD) {
     struct swap_header_v1_2 swapHeader = {0};
-
     for (int i = 0; i < sizeof(swapHeader.bootbits); i++) {
         swapHeader.bootbits[i] = '\0';
     }
-    write(swapFD, swapHeader.bootbits, sizeof(swapHeader.bootbits));
 
-    uint32_t swapver[1] = { SWAP_VERSION };
-    write(swapFD, swapver, sizeof(uint32_t));
-
-    uint32_t lastPage[1] = { __bswap_constant_32(SWAP_LAST_PAGE) };
-    write(swapFD, lastPage, sizeof(uint32_t));
-
-    uint32_t badPages[1] = { 0 };
-    write(swapFD, badPages, sizeof(uint32_t));
-
+    uint32_t swapver[1] = { htole32(SWAP_VERSION) };
+    uint32_t swapLastPage = mkswap_get_last_page(swapFD);
+    uint32_t lastPage[1] = { htole32(swapLastPage) };
+    uint32_t badPages[1] = { htole32(0) };
     uuid_generate(swapHeader.uuid);
-    write(swapFD, swapHeader.uuid, sizeof(swapHeader.uuid));
 
+    write(swapFD, swapHeader.bootbits, sizeof(swapHeader.bootbits));
+    write(swapFD, swapver, sizeof(uint32_t));
+    write(swapFD, lastPage, sizeof(uint32_t));
+    write(swapFD, badPages, sizeof(uint32_t));
+    write(swapFD, swapHeader.uuid, sizeof(swapHeader.uuid));
     write(swapFD, swapHeader.volume_name, sizeof(swapHeader.volume_name));
 
     lseek(swapFD, SWAP_SIGNATURE_OFFSET, SEEK_SET);
@@ -50,6 +71,12 @@ void allocate_swap() {
     if (prog_swap != NULL) {
         new_chunk = prog_swap->chunk_number + 1;
     }
+
+    if (new_chunk >= SWAP_MAX_COUNT) {
+        perror("Maximum swaps allocated. Cannot allocate any more swaps.");
+        return;
+    }
+
     char fileName[PATH_MAX];
     snprintf(fileName, sizeof(fileName), SWAP_PATH, new_chunk);
     char* filePath = strdup(fileName);

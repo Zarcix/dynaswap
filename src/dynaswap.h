@@ -6,7 +6,7 @@
 #define MEMORY_FREE_THRESHOLD 0.3
 
 /* Swap Variables */
-#define SWAP_USED_THRESHOLD 0.7
-#define SWAP_FREE_THRESHOLD 0.3
+#define SWAP_FULL_THRESHOLD 0.5
+#define SWAP_FREE_THRESHOLD 0.5
 
 #endif

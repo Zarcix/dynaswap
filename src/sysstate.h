@@ -6,9 +6,10 @@
 // PSI
 #include <sys/poll.h>
 #define PSI_FILE "/proc/pressure/memory"
-#define PSI_SOME_AVG10 50
-#define PSI_SOME_AVG60 100
-#define PSI_FULL_AVG10 10
+#define PSI_SOME_AVG10 50  * 1000
+#define PSI_SOME_AVG60 100 * 1000
+#define PSI_TIMEOUT 5000
+
 // Mem
 
 /* System State Structs */
@@ -16,9 +17,23 @@ struct MemState {
     struct meminfo_info* meminfo;
 };
 
+enum PSIPollStatus {
+    STRAINED,
+    RELAXED
+};
 
 struct PSIState {
     struct pollfd pfd;
+};
+
+struct PSIMetrics {
+    float some_avg10;
+    float some_avg60;
+    float some_avg300;
+
+    float full_avg10;
+    float full_avg60;
+    float full_avg300;
 };
 
 /* Statics */
@@ -34,6 +49,8 @@ void free_direct_memory();
 
 /* PSI Fns*/
 void init_psi();
+enum PSIPollStatus poll_psi();
+struct PSIMetrics read_psi();
 void free_psi();
 
 

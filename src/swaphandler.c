@@ -17,6 +17,8 @@
 #include "swaphandler.h"
 #include "swapheader.h"
 
+struct MemoryChunk* prog_swap = NULL;
+
 /* Helpers */
 
 uint32_t mkswap_get_last_page(int swapFD) {
@@ -40,7 +42,7 @@ uint32_t mkswap_get_last_page(int swapFD) {
 /* Func Defs */
 
 void init_dynamic_swap() {
-    prog_swap = NULL;
+    allocate_swap();
 }
 
 void mkswap(int swapFD) {
@@ -128,4 +130,10 @@ void free_swap() {
 
     free(current_chunk->file_path);
     free(current_chunk);
+}
+
+void free_dynamic_swap() {
+    while (prog_swap != NULL) {
+        free_swap();
+    }
 }

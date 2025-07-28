@@ -1,0 +1,11 @@
+#ifndef CONFIG
+#define CONFIG
+
+#define SWAP_FULL_THRESHOLD_KEY "SWAP_FULL_THRESHOLD"
+#define SWAP_FREE_THRESHOLD_KEY "SWAP_FREE_THRESHOLD"
+#define PSI_SOME_STRESS_KEY "PSI_SOME_STRESS"
+#define PSI_FULL_STRESS_KEY "PSI_FULL_STRESS"
+
+void parse_config(char* config_path);
+
+#endif

@@ -2,11 +2,17 @@
 #include <stdbool.h>
 #include <stdlib.h>
 
+#include "config.h"
 #include "dynaswap.h"
 #include "sysstate.h"
 #include "psi.h"
 #include "swaphandler.h"
 
+double SWAP_FULL_THRESHOLD;
+double SWAP_FREE_THRESHOLD;
+
+long long PSI_SOME_STRESS;
+long long PSI_FULL_STRESS;
 
 void alloc_dynaswap(struct PSIMetrics *metrics) {
     #ifdef DEBUG
@@ -116,6 +122,7 @@ void sig_handler(int signal) {
 }
 
 int main() {
+    parse_config("/home/personal/Projects/dynaswap/misc/dynaswap.conf");
     init_dynaswap();
     signal(SIGINT, sig_handler);
 

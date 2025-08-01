@@ -107,13 +107,21 @@ void init_dynaswap(int argc, char** argv) {
     // Prereq Init
     if (getuid()) {
         printf("Error: This program must be run as root.\n");
-        raise(SIGABRT);
+        exit(EXIT_FAILURE);
     }
+
+    #ifdef DEBUG
+        printf("Parsing Args and Config File\n");
+    #endif
 
     parse_args(argc, argv);
     parse_config(prog_args.conf_file);
 
     // Actual Program Init
+    #ifdef DEBUG
+        printf("Initializing program\n");
+    #endif
+
     init_direct_memory();
     init_psi();
     init_dynamic_swap();
@@ -135,6 +143,9 @@ void sig_handler(int signal) {
 }
 
 int main(int argc, char** argv) {
+    #ifdef DEBUG
+        printf("Debugging Enabled\n");
+    #endif
     init_dynaswap(argc, argv);
     signal(SIGINT, sig_handler);
 

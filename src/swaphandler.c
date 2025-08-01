@@ -26,13 +26,13 @@ uint32_t mkswap_get_last_page(int swapFD) {
     struct stat swapst;
     if (fstat(swapFD, &swapst) != 0) {
         perror("mkswap failed: cannot read swap file !! fstat");
-        raise(SIGABRT);
+        exit(EXIT_FAILURE);
     }
 
     off_t swap_size = swapst.st_size;
     if (swap_size < SWAP_PAGE_SIZE) {
         perror("mkswap failed: file too small || swap_size");
-        raise(SIGABRT);
+        exit(EXIT_FAILURE);
     }
 
     uint32_t last_page = (swap_size / SWAP_PAGE_SIZE) - 1;

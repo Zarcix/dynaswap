@@ -1,6 +1,7 @@
 #include <fcntl.h>
 #include <signal.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 #include <errno.h>
@@ -72,12 +73,12 @@ enum PSIPollStatus poll_psi() {
     #endif
     if (poll(&psi_state.pfd, 1, PSI_TIMEOUT) < 0) {
         perror("Failed to poll PSI: poll_psi poll()");
-        raise(SIGABRT);
+        exit(EXIT_FAILURE);
     }
 
     if (psi_state.pfd.revents & POLLERR) {
         fprintf(stderr, "poll_psi: POLLERR (PSI event source gone)\n");
-        raise(SIGABRT);
+        exit(EXIT_FAILURE);
     }
 
     if (psi_state.pfd.revents & POLLPRI) {
@@ -94,7 +95,7 @@ struct PSIMetrics read_psi() {
     ssize_t n = read(psi_state.pfd.fd, buf, buf_size - 1);
     if (n <= 0) {
         perror("Reading PSI Failed");
-        raise(SIGABRT);
+        exit(EXIT_FAILURE);
     }
     buf[n] = '\0';
 

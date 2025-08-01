@@ -1,9 +1,10 @@
 #include <libconfig.h>
-#include <signal.h>
 #include <stdbool.h>
 #include <stdlib.h>
 #include <getopt.h>
 #include <string.h>
+#include <unistd.h>
+#include <errno.h>
 
 #include "dynaswap.h"
 #include "config.h"
@@ -33,35 +34,35 @@ void parse_config(char* config_path) {
     if (!config_read_file(&conf_file, config_path)) {
         fprintf(stderr, "Failed to read config | %s:%d - %s\n", config_error_file(&conf_file), config_error_line(&conf_file), config_error_text(&conf_file));
         config_destroy(&conf_file);
-        raise(SIGABRT);
+        exit(EXIT_FAILURE);
     }
 
     if (!config_lookup_float(&conf_file, SWAP_FULL_THRESHOLD_KEY, &SWAP_FULL_THRESHOLD)) {
         fprintf(stderr, "Could not read 'SWAP_FULLTHRESHOLD_KEY' from configuration file\n");
         config_destroy(&conf_file);
-        raise(SIGABRT);
+        exit(EXIT_FAILURE);
     }
 
     if (!config_lookup_float(&conf_file, SWAP_FREE_THRESHOLD_KEY, &SWAP_FREE_THRESHOLD)) {
         fprintf(stderr, "Could not read 'SWAP_FREE_THRESHOLD_KEY' from configuration file\n");
         config_destroy(&conf_file);
-        raise(SIGABRT);
+        exit(EXIT_FAILURE);
     }
 
     if (!config_lookup_int64(&conf_file, PSI_SOME_STRESS_KEY, &PSI_SOME_STRESS)) {
         fprintf(stderr, "Could not read 'PSI_SOME_STRESS_KEY' from configuration file\n");
         config_destroy(&conf_file);
-        raise(SIGABRT);
+        exit(EXIT_FAILURE);
     }
     if (!config_lookup_int64(&conf_file, PSI_FULL_STRESS_KEY, &PSI_FULL_STRESS)) {
         fprintf(stderr, "Could not read 'PSI_FULL_STRESS_KEY' from configuration file\n");
         config_destroy(&conf_file);
-        raise(SIGABRT);
+        exit(EXIT_FAILURE);
     }
     if (!config_lookup_string(&conf_file, SWAP_PATH_KEY, &SWAP_PATH)) {
         fprintf(stderr, "Could not read 'SWAP_PATH_KEY' from configuration file\n");
         config_destroy(&conf_file);
-        raise(SIGABRT);
+        exit(EXIT_FAILURE);
     } else {
         SWAP_PATH = strdup(SWAP_PATH);
     }
@@ -86,10 +87,14 @@ void parse_config(char* config_path) {
 }
 
 void parse_args(int argc, char** argv) {
-    char ch;
+    int ch;
     while ((ch = getopt_long(argc, argv, "hc:", long_options, NULL)) != -1) {
         switch (ch) {
             case 'c': {
+                if (access(optarg, R_OK) != 0) {
+                    fprintf(stderr, "Error: Cannot access config file '%s': %s\n", optarg, strerror(errno));
+                    exit(EXIT_FAILURE);
+                }
                 prog_args.conf_file = strdup(optarg);
                 break;
             }
@@ -100,7 +105,7 @@ void parse_args(int argc, char** argv) {
             case '?': {
                 printf("Invalid argument.\n");
                 print_usage();
-                raise(SIGABRT);
+                exit(EXIT_FAILURE);
             }
         }
     }
@@ -108,6 +113,6 @@ void parse_args(int argc, char** argv) {
     if (prog_args.conf_file == NULL) {
         printf("Error: --config_file/-c is required.\n");
         print_usage();
-        raise(SIGABRT);
+        exit(EXIT_FAILURE);
     }
 }

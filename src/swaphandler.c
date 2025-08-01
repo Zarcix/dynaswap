@@ -16,6 +16,7 @@
 
 #include "swaphandler.h"
 #include "swapheader.h"
+#include "dynaswap.h"
 
 struct MemoryChunk* prog_swap = NULL;
 
@@ -25,13 +26,13 @@ uint32_t mkswap_get_last_page(int swapFD) {
     struct stat swapst;
     if (fstat(swapFD, &swapst) != 0) {
         perror("mkswap failed: cannot read swap file !! fstat");
-        exit(SIGABRT);
+        raise(SIGABRT);
     }
 
     off_t swap_size = swapst.st_size;
     if (swap_size < SWAP_PAGE_SIZE) {
         perror("mkswap failed: file too small || swap_size");
-        exit(SIGABRT);
+        raise(SIGABRT);
     }
 
     uint32_t last_page = (swap_size / SWAP_PAGE_SIZE) - 1;
@@ -80,7 +81,7 @@ void allocate_swap() {
     }
 
     char fileName[PATH_MAX];
-    snprintf(fileName, sizeof(fileName), SWAP_PATH, new_chunk);
+    snprintf(fileName, sizeof(fileName), "%s/Chunk%d", SWAP_PATH, new_chunk);
     char* filePath = strdup(fileName);
 
     FILE* swapFile = fopen(filePath, "w+");

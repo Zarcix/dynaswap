@@ -1,6 +1,7 @@
 #ifndef DYNASWAP_H
 #define DYNASWAP_H
 
+extern const char* SWAP_PATH;
 
 /* Swap Variables */
 extern double SWAP_FULL_THRESHOLD;
@@ -10,6 +11,4 @@ extern double SWAP_FREE_THRESHOLD;
 extern long long PSI_SOME_STRESS;
 extern long long PSI_FULL_STRESS;
 
-/* Debug Variables */
-// #define DEBUG
 #endif

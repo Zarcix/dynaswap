@@ -1,12 +1,15 @@
 #include <signal.h>
 #include <stdbool.h>
 #include <stdlib.h>
+#include <unistd.h>
 
 #include "config.h"
 #include "dynaswap.h"
 #include "sysstate.h"
 #include "psi.h"
 #include "swaphandler.h"
+
+const char* SWAP_PATH = "";
 
 double SWAP_FULL_THRESHOLD;
 double SWAP_FREE_THRESHOLD;
@@ -100,7 +103,17 @@ void dynaswap() {
     #endif
 }
 
-void init_dynaswap() {
+void init_dynaswap(int argc, char** argv) {
+    // Prereq Init
+    if (getuid()) {
+        printf("Error: This program must be run as root.\n");
+        raise(SIGABRT);
+    }
+
+    parse_args(argc, argv);
+    parse_config(prog_args.conf_file);
+
+    // Actual Program Init
     init_direct_memory();
     init_psi();
     init_dynamic_swap();
@@ -114,16 +127,15 @@ void takedown_dynaswap() {
 
 void sig_handler(int signal) {
     #ifdef DEBUG
-        printf("Cleaning up before SIGINT\n");
+        printf("\nCleaning up before SIGINT\n");
     #endif
 
     takedown_dynaswap();
     exit(0);
 }
 
-int main() {
-    parse_config("/home/personal/Projects/dynaswap/misc/dynaswap.conf");
-    init_dynaswap();
+int main(int argc, char** argv) {
+    init_dynaswap(argc, argv);
     signal(SIGINT, sig_handler);
 
     while (true) {

@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <getopt.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <unistd.h>
 #include <errno.h>
 
@@ -64,6 +65,12 @@ void parse_config(char* config_path) {
         config_destroy(&conf_file);
         exit(EXIT_FAILURE);
     } else {
+        struct stat st;
+        if (stat(SWAP_PATH, &st) != 0 || !S_ISDIR(st.st_mode)) {
+                fprintf(stderr, "Error: '%s' is not a valid directory\n", SWAP_PATH);
+                config_destroy(&conf_file);
+                exit(EXIT_FAILURE);
+        }
         SWAP_PATH = strdup(SWAP_PATH);
     }
 

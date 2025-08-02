@@ -12,7 +12,6 @@
 #include <unistd.h>
 #include <byteswap.h>
 #include <uuid/uuid.h>
-#include <signal.h>
 
 #include "swaphandler.h"
 #include "swapheader.h"

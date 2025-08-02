@@ -2,7 +2,7 @@
 #define SWAP_HANDLER
 
 #define SWAP_PAGE_SIZE 4096
-#define SWAP_SIZE ((long)4 * 1024 * 1024 * 1024)
+#define SWAP_SIZE ((long)1 * 1024 * 1024 * 1024)
 #define SWAP_MAX_COUNT 24
 
 #include <stdio.h>

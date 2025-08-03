@@ -1,74 +1,54 @@
 #include <signal.h>
 #include <stdbool.h>
 #include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
 
+#include "constants.h"
 #include "config.h"
-#include "dynaswap.h"
 #include "sysstate.h"
-#include "psi.h"
 #include "swaphandler.h"
 
-const char* SWAP_PATH = "";
+void alloc_dynaswap() {
+    log_debug("- " COLOR_BOLD "High" COLOR_OFF " Memory Usage\n");
 
-double SWAP_FULL_THRESHOLD;
-double SWAP_FREE_THRESHOLD;
-
-long long PSI_SOME_STRESS;
-long long PSI_FULL_STRESS;
-
-void alloc_dynaswap(struct PSIMetrics *metrics) {
-    #ifdef DEBUG
-        printf("- High Memory Usage\n");
-    #endif
-    float memory_usage, swap_usage;
+    float swap_usage;
     swap_usage = poll_swap_usage();
-    memory_usage = poll_mem_usage();
 
     // Don't allocate more swap if swap is not really being used
     if (swap_usage == swap_usage && swap_usage < SWAP_FULL_THRESHOLD) {
+        log_debug("\tSkipping, swap is not full enough\n");
         return;
     }
 
-    #ifdef DEBUG
-        printf("\tAllocating Swap\n");
-    #endif
+    log_debug("\tAllocation Swap\n");
 
     allocate_swap();
 }
 
 void free_dynaswap(struct PSIMetrics *metrics) {
-    #ifdef DEBUG
-        printf("- Low Memory Usage\n");
-    #endif
+    log_debug("- " COLOR_BOLD "Low" COLOR_OFF " Memory Usage\n");
 
     // Always keep some swap to not fully stall the computer
     if (prog_swap->chunk_number == 0) {
-        #ifdef DEBUG
-            printf("\t0th Chunk Number, returning");
-        #endif
+        log_debug("\t0th Chunk Number, returning\n");
         return;
     }
 
-    // Only free if there is no stress on the system
+    // 60 second window is used here because we want to assume that long term there is no pressure
     if (metrics->some_avg60 >= PSI_SOME_STRESS || metrics->full_avg60 >= PSI_FULL_STRESS) {
-        #ifdef DEBUG
-            printf("\tStress values not high enough, returning");
-        #endif
+        log_debug("\tStress values not high enough, returning\n");
         return;
     }
 
-    float memory_usage, swap_usage;
+    float swap_usage;
 
     swap_usage = poll_swap_usage();
     if (swap_usage != swap_usage || swap_usage > SWAP_FREE_THRESHOLD) {
         return;
     }
 
-    memory_usage = poll_mem_usage();
-    #ifdef DEBUG
-        printf("\tFreeing Swap\n");
-    #endif
+    log_debug("\tFreeing Swap\n");
 
     free_swap();
 }
@@ -77,19 +57,25 @@ void dynaswap() {
     enum PSIPollStatus poll_stat = poll_psi();
     struct PSIMetrics metrics = read_psi();
 
-    #ifdef DEBUG
-        printf("PSI Metrics:\n");
-        printf("\tsome avg10 = %.2f\n", metrics.some_avg10);
-        printf("\tsome avg60 = %.2f\n", metrics.some_avg60);
-        printf("\tsome avg300 = %.2f\n", metrics.some_avg300);
-        printf("\tfull avg10 = %.2f\n", metrics.full_avg10);
-        printf("\tfull avg60 = %.2f\n", metrics.full_avg60);
-        printf("\tfull avg300 = %.2f\n", metrics.full_avg300);
-    #endif
+    log_debug(
+        "PSI Metrics:\n"
+        "\tsome avg10 = %.2f\n"
+        "\tsome avg60 = %.2f\n"
+        "\tsome avg300 = %.2f\n"
+        "\tfull avg10 = %.2f\n"
+        "\tfull avg60 = %.2f\n"
+        "\tfull avg300 = %.2f\n",
+        metrics.some_avg10,
+        metrics.some_avg60,
+        metrics.some_avg300,
+        metrics.full_avg10,
+        metrics.full_avg60,
+        metrics.full_avg300
+    );
 
     switch (poll_stat) {
         case STRAINED: {
-            alloc_dynaswap(&metrics);
+            alloc_dynaswap();
             break;
         }
         case RELAXED: {
@@ -97,10 +83,6 @@ void dynaswap() {
             break;
         }
     }
-
-    #ifdef DEBUG
-        printf("\n\n");
-    #endif
 }
 
 void init_dynaswap(int argc, char** argv) {
@@ -110,21 +92,19 @@ void init_dynaswap(int argc, char** argv) {
         exit(EXIT_FAILURE);
     }
 
-    #ifdef DEBUG
-        printf("Parsing Args and Config File\n");
-    #endif
+    log_debug("Parsing Args and Config File\n");
 
     parse_args(argc, argv);
     parse_config(prog_args.conf_file);
 
     // Actual Program Init
-    #ifdef DEBUG
-        printf("Initializing program\n");
-    #endif
+    log_debug("Initializing Dynaswap\n");
 
     init_direct_memory();
     init_psi();
     init_dynamic_swap();
+
+    log_debug("Initialization Finished\n");
 }
 
 void takedown_dynaswap() {
@@ -134,18 +114,15 @@ void takedown_dynaswap() {
 }
 
 void sig_handler(int signal) {
-    #ifdef DEBUG
-        printf("\nCleaning up before SIGINT\n");
-    #endif
+    log_debug("\nCleaning up before signal `%s`\n", strsignal(signal));
 
     takedown_dynaswap();
     exit(0);
 }
 
 int main(int argc, char** argv) {
-    #ifdef DEBUG
-        printf("Debugging Enabled\n");
-    #endif
+    log_debug("Debugging Enabled\n");
+
     init_dynaswap(argc, argv);
     signal(SIGINT, sig_handler);
 

@@ -7,7 +7,7 @@
 #include <unistd.h>
 #include <errno.h>
 
-#include "dynaswap.h"
+#include "constants.h"
 #include "config.h"
 
 struct Args prog_args = {0};
@@ -76,21 +76,19 @@ void parse_config(char* config_path) {
 
     config_destroy(&conf_file);
 
-    #ifdef DEBUG
-        printf(
-            "Configuration Settings\n"
-            "\tSWAP_FULL_THRESHOLD_KEY: %f\n"
-            "\tSWAP_FREE_THRESHOLD_KEY: %f\n"
-            "\tPSI_FULL_STRESS_KEY: %lld\n"
-            "\tPSI_SOME_STRESS_KEY: %lld\n"
-            "\tSWAP_PATH_KEY: %s\n",
-            SWAP_FULL_THRESHOLD,
-            SWAP_FREE_THRESHOLD,
-            PSI_SOME_STRESS,
-            PSI_FULL_STRESS,
-            SWAP_PATH
-        );
-    #endif
+    log_debug(
+        "Configuration Settings\n"
+        "\tSWAP_FULL_THRESHOLD_KEY: %f\n"
+        "\tSWAP_FREE_THRESHOLD_KEY: %f\n"
+        "\tPSI_FULL_STRESS_KEY: %lld\n"
+        "\tPSI_SOME_STRESS_KEY: %lld\n"
+        "\tSWAP_PATH_KEY: %s\n",
+        SWAP_FULL_THRESHOLD,
+        SWAP_FREE_THRESHOLD,
+        PSI_SOME_STRESS,
+        PSI_FULL_STRESS,
+        SWAP_PATH
+    );
 }
 
 void parse_args(int argc, char** argv) {

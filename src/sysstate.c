@@ -7,6 +7,10 @@
 #include <libproc2/meminfo.h>
 
 #include "sysstate.h"
+#include "constants.h"
+
+struct MemState direct_memory_state;
+struct PSIState psi_state;
 
 /* Direct Memory */
 void init_direct_memory() {
@@ -67,9 +71,8 @@ void init_psi() {
 }
 
 enum PSIPollStatus poll_psi() {
-    #ifdef DEBUG
-        printf("Polling PSI\n");
-    #endif
+    log_debug("Polling PSI\n");
+
     if (poll(&psi_state.pfd, 1, PSI_TIMEOUT) < 0) {
         perror("Failed to poll PSI: poll_psi poll()");
         exit(EXIT_FAILURE);

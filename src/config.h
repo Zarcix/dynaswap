@@ -7,8 +7,6 @@
 #define PSI_FULL_STRESS_KEY "PSI_FULL_STRESS"
 #define SWAP_PATH_KEY "SWAP_PATH"
 
-#define DEBUG
-
 struct Args {
     char* conf_file;
 };

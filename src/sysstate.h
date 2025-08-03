@@ -6,8 +6,8 @@
 // PSI
 #include <sys/poll.h>
 #define PSI_FILE "/proc/pressure/memory"
-#define PSI_SOME_AVG10 50  * 1000
-#define PSI_SOME_AVG60 100 * 1000
+#define PSI_SOME_AVG10 700000 // 7% pressure | .7s / 10s
+#define PSI_SOME_AVG60 1000000 // 1.6% pressure | 1s / 60s
 #define PSI_TIMEOUT 5000
 
 // Mem
@@ -35,11 +35,6 @@ struct PSIMetrics {
     float full_avg60;
     float full_avg300;
 };
-
-/* Statics */
-
-static struct MemState direct_memory_state;
-static struct PSIState psi_state;
 
 /* Direct Memory Fns */
 void init_direct_memory();

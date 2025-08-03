@@ -15,7 +15,7 @@
 
 #include "swaphandler.h"
 #include "swapheader.h"
-#include "dynaswap.h"
+#include "constants.h"
 
 struct MemoryChunk* prog_swap = NULL;
 
@@ -47,7 +47,7 @@ void init_dynamic_swap() {
 
 void mkswap(int swapFD) {
     struct swap_header_v1_2 swapHeader = {0};
-    for (int i = 0; i < sizeof(swapHeader.bootbits); i++) {
+    for (unsigned int i = 0; i < sizeof(swapHeader.bootbits); i++) {
         swapHeader.bootbits[i] = '\0';
     }
 

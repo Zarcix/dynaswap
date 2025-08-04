@@ -111,6 +111,9 @@ void takedown_dynaswap() {
     free_direct_memory();
     free_psi();
     free_dynamic_swap();
+
+    free_config();
+    free_args();
 }
 
 void sig_handler(int signal) {

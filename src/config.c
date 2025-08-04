@@ -232,3 +232,11 @@ void read_config(char* config_path) {
         SWAP_SIZE
     );
 }
+
+void free_args() {
+    free(prog_args.conf_file);
+}
+
+void free_config() {
+    free((void*)SWAP_PATH);
+}

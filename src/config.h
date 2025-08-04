@@ -25,5 +25,7 @@ struct ConfigList {
 
 void read_args(int argc, char** argv);
 void read_config(char* config_path);
+void free_args();
+void free_config();
 
 #endif

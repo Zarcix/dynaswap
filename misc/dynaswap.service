@@ -2,7 +2,7 @@
 Description=Dynamic Swapping under load
 
 [Service]
-ExecStart=/bin/dynaswap
+ExecStart=/bin/dynaswap -c /etc/dynaswap.conf
 
 [Install]
 WantedBy=multi-user.target

@@ -94,8 +94,8 @@ void init_dynaswap(int argc, char** argv) {
 
     log_debug("Parsing Args and Config File\n");
 
-    parse_args(argc, argv);
-    parse_config(prog_args.conf_file);
+    read_args(argc, argv);
+    read_config(prog_args.conf_file);
 
     // Actual Program Init
     log_debug("Initializing Dynaswap\n");

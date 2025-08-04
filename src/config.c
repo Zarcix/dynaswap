@@ -91,6 +91,38 @@ static void parse_config_string(config_t* conf, const char* key, char **out) {
     *out = strdup(val);
 }
 
+static unsigned long long parse_size_string(const char* str) {
+    char* end;
+    errno = 0;
+
+    // Parse the numeric part
+    double num = strtod(str, &end);
+    if (errno != 0 || end == str) {
+        fprintf(stderr, "Invalid size format: '%s'\n", str);
+        exit(EXIT_FAILURE);
+    }
+
+    // Skip whitespace
+    while (*end == ' ' || *end == '\t' || *end == '\n' || *end == '\r' || *end == '\v' || *end == '\f') {
+        end++;
+    }
+
+    // Parse the unit
+    unsigned long long multiplier = 1;
+    if (*end == 'G' || *end == 'g') {
+        multiplier = 1024ULL * 1024 * 1024;
+    } else if (*end == 'M' || *end == 'm') {
+        multiplier = 1024ULL * 1024;
+    } else if (*end == 'K' || *end == 'k') {
+        multiplier = 1024ULL;
+    } else if (*end != '\0') {
+        fprintf(stderr, "Unknown size suffix: '%c'\n", *end);
+        exit(EXIT_FAILURE);
+    }
+
+    return (unsigned long long)(num * multiplier);
+}
+
 static struct ConfigList parse_config(char* config_path) {
     config_t conf_file;
     struct ConfigList dynaswap_config = {0};
@@ -149,6 +181,8 @@ static bool validate_config(struct ConfigList conf) {
         valid = false;
     }
 
+    SWAP_SIZE = parse_size_string(conf.swap_size);
+
     return valid;
 }
 
@@ -182,11 +216,13 @@ void read_config(char* config_path) {
         "\tSWAP_FREE_THRESHOLD_KEY: %f\n"
         "\tPSI_FULL_STRESS_KEY: %lld\n"
         "\tPSI_SOME_STRESS_KEY: %lld\n"
-        "\tSWAP_PATH_KEY: %s\n",
+        "\tSWAP_PATH_KEY: %s\n"
+        "\tSWAP_SIZE: %llu\n",
         SWAP_FULL_THRESHOLD,
         SWAP_FREE_THRESHOLD,
         PSI_SOME_STRESS,
         PSI_FULL_STRESS,
-        SWAP_PATH
+        SWAP_PATH,
+        SWAP_SIZE
     );
 }

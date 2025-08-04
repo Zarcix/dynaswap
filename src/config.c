@@ -95,29 +95,35 @@ static unsigned long long parse_size_string(const char* str) {
     char* end;
     errno = 0;
 
-    // Parse the numeric part
     double num = strtod(str, &end);
     if (errno != 0 || end == str) {
         fprintf(stderr, "Invalid size format: '%s'\n", str);
         exit(EXIT_FAILURE);
     }
 
-    // Skip whitespace
     while (*end == ' ' || *end == '\t' || *end == '\n' || *end == '\r' || *end == '\v' || *end == '\f') {
         end++;
     }
 
-    // Parse the unit
     unsigned long long multiplier = 1;
-    if (*end == 'G' || *end == 'g') {
-        multiplier = 1024ULL * 1024 * 1024;
-    } else if (*end == 'M' || *end == 'm') {
-        multiplier = 1024ULL * 1024;
-    } else if (*end == 'K' || *end == 'k') {
-        multiplier = 1024ULL;
-    } else if (*end != '\0') {
-        fprintf(stderr, "Unknown size suffix: '%c'\n", *end);
-        exit(EXIT_FAILURE);
+    switch (*end) {
+        case 'G': case 'g': {
+            multiplier = 1024ULL * 1024 * 1024;
+            break;
+        }
+        case 'M': case 'm': {
+            multiplier = 1024ULL * 1024;
+            break;
+        }
+        case 'K': case 'k': {
+            multiplier = 1024ULL;
+            break;
+        }
+        default: {
+            fprintf(stderr, "Unsupported size suffix: '%c'\n", *end);
+            exit(EXIT_FAILURE);
+            break;
+        }
     }
 
     return (unsigned long long)(num * multiplier);

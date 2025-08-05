@@ -123,11 +123,19 @@ void sig_handler(int signal) {
     exit(0);
 }
 
+void setup_signals() {
+    signal(SIGINT,  sig_handler);
+    signal(SIGTERM, sig_handler);
+    signal(SIGHUP,  sig_handler);
+    signal(SIGQUIT, sig_handler);
+
+}
+
 int main(int argc, char** argv) {
     log_debug("Debugging Enabled\n");
 
     init_dynaswap(argc, argv);
-    signal(SIGINT, sig_handler);
+    setup_signals();
 
     while (true) {
         dynaswap();

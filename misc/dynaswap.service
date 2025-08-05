@@ -1,8 +1,12 @@
 [Unit]
 Description=Dynamic Swapping under load
+After=local-fs.target
+Requires=local-fs.target
 
 [Service]
+Type=simple
 ExecStart=/bin/dynaswap -c /etc/dynaswap.conf
+KillSignal=SIGTERM
 
 [Install]
 WantedBy=multi-user.target

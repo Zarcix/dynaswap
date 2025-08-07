@@ -1,0 +1,35 @@
+# Maintainer: Brian Ngo <mrslime43@gmail.com>
+pkgname=dynaswap
+pkgver=1.0.0
+pkgrel=1
+pkgdesc="Dynamic swap management daemon"
+arch=('x86_64' 'aarch64')
+url="https://github.com/Zarcix/dynaswap"
+license=('MIT')
+depends=('systemd')
+makedepends=('gcc' 'make')
+backup=('etc/dynaswap.conf')
+source=("$pkgname-$pkgver.tar.gz::$url/archive/$pkgver.tar.gz")
+sha256sums=('ab153d5636eb47ced7a3b82a3d9f2efc23f83bd50f9bc39db414480975422941')
+
+build() {
+    cd "$srcdir/$pkgname-$pkgver"
+    make
+}
+
+package() {
+    cd "$srcdir/$pkgname-$pkgver"
+
+    # Extract the arch used by the Makefile (same as uname -m)
+    local make_arch
+    make_arch="$(uname -m)"
+
+    # Install the binary
+    install -Dm755 "build/${make_arch}/dynaswap" "$pkgdir/usr/bin/dynaswap"
+
+    # Install config file
+    install -Dm644 "misc/dynaswap.conf" "$pkgdir/etc/dynaswap.conf"
+
+    # Install systemd service
+    install -Dm644 "misc/dynaswap.service" "$pkgdir/usr/lib/systemd/system/dynaswap.service"
+}

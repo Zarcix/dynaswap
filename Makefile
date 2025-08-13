@@ -34,4 +34,4 @@ dynaswap: init libs $(SRC)
 clean:
 	rm -rf build/*
 
-.PHONY: all clean
+.PHONY: all init libs clean

@@ -13,12 +13,12 @@ init:
 	mkdir -p $(BUILD_DIR)
 
 libs:
-	@pushd public/libconfig && \
-	git clean -xdf . && \
+	@pushd public/libconfig >> /dev/null && \
+	git clean -xdf . >> /dev/null && \
 	git reset --hard && \
-	autoreconf && \
-	./configure --enable-static --disable-shared && \
-	make && \
+	autoreconf >> /dev/null 2>&1 && \
+	./configure --enable-static --disable-shared >> /dev/null 2>&1 && \
+	make -s >> /dev/null 2>&1 && \
 	popd
 
 	@cp public/libconfig/lib/.libs/libconfig.a build/

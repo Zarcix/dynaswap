@@ -1,7 +1,7 @@
 #ifndef PROG_CONSTANTS
 #define PROG_CONSTANTS
 
-#define DEBUG
+// #define DEBUG
 
 #ifdef DEBUG
     #define log_debug(...) fprintf(stdout, __VA_ARGS__)

@@ -1,6 +1,7 @@
 # Maintainer: Brian Ngo <mrslime43@gmail.com>
 pkgname=dynaswap-bin
-pkgver=1.0.0
+_pkgrealname=dynaswap
+pkgver=1.0.1
 pkgrel=1
 pkgdesc="Dynamic swap management daemon"
 arch=('x86_64' 'aarch64')
@@ -10,14 +11,14 @@ depends=('systemd')
 makedepends=('gcc' 'make')
 backup=('etc/dynaswap.conf')
 
-source=("$pkgname-$pkgver.tar.gz::$url/archive/$pkgver.tar.gz")
-sha256sums=('ab153d5636eb47ced7a3b82a3d9f2efc23f83bd50f9bc39db414480975422941')
+source=("$_pkgrealname-$pkgver.tar.gz::$url/archive/$pkgver.tar.gz")
+sha256sums=('53490019ff5e7a3ffa27fc387c7aa2c33797f3d313b27bb8fe44cd769193cd50')
 
-source_x86_64=("dynaswap_x86_64")
+source_x86_64=("dynaswap_x86_64::$url/releases/download/$pkgver/dynaswap_x86_64")
 sha256sums_x86_64=('b8b45e09d318bd0a16f7aab598b3b4b94e1f6904d4aa451cde966e45388486cb')
 
-source_aarch64=("dynaswap_aarch64")
-sha256sums_aarch64=('97271b30b602d241c0fa1be3f54e8929d2294ad376766804392dd17c96fac896')
+source_aarch64=("dynaswap_aarch64::$url/releases/download/$pkgver/dynaswap_aarch64")
+sha256sums_aarch64=('0f087db69a327c0e96e5fa200cf94066cf8aa301e71b90cc4d82202b195390a7')
 
 package() {
     cd "$srcdir"
@@ -28,7 +29,7 @@ package() {
     # Install the binary
     install -Dm755 "dynaswap_$make_arch" "$pkgdir/usr/bin/dynaswap"
 
-    cd "$srcdir/$pkgname-$pkgver"
+    cd "$srcdir/$_pkgrealname-$pkgver"
 
     # Install config file
     install -Dm644 "misc/dynaswap.conf" "$pkgdir/etc/dynaswap.conf"

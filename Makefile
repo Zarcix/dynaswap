@@ -20,7 +20,7 @@ libs:
 	make -s >> /dev/null 2>&1 && \
 	popd
 
-	@cp public/libconfig/lib/.libs/libconfig.a build/
+	@cp public/libconfig/lib/.libs/libconfig.a build/libconfig_$(ARCH).a
 
 	@pushd public/libconfig >> /dev/null && \
 	git clean -xdf . >> /dev/null && \
@@ -30,7 +30,7 @@ dynaswap: init libs $(SRC)
 	gcc \
 		$(CFLAGS) \
 		$(SRC) \
-		$(wildcard build/*.a) \
+		$(wildcard build/*_$(ARCH).a) \
 		$(LIBS) \
 		-o $(OUTPUT)
 

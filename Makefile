@@ -22,6 +22,10 @@ libs:
 
 	@cp public/libconfig/lib/.libs/libconfig.a build/
 
+	@pushd public/libconfig >> /dev/null && \
+	git clean -xdf . >> /dev/null && \
+	git reset --hard
+
 dynaswap: init libs $(SRC)
 	gcc \
 		$(CFLAGS) \

@@ -1,10 +1,9 @@
 ARCH ?= $(shell uname -m)
-BUILD_DIR := build/$(ARCH)
-OUTPUT := $(BUILD_DIR)/dynaswap
+BUILD_DIR := build
+OUTPUT := $(BUILD_DIR)/dynaswap_$(ARCH)
 SRC := $(wildcard src/*.c)
 CFLAGS := -Wall -Wextra
 LIBS := -luuid -lproc2
-SLIBS := $(wildcard build/*.a)
 
 all: dynaswap
 
@@ -27,7 +26,7 @@ dynaswap: init libs $(SRC)
 	gcc \
 		$(CFLAGS) \
 		$(SRC) \
-		$(SLIBS) \
+		$(wildcard build/*.a) \
 		$(LIBS) \
 		-o $(OUTPUT)
 

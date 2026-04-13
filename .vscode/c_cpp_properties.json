@@ -13,8 +13,10 @@
             ],
             "defines": [
                 "__KERNEL__",
+                "MODULE",
                 "KBUILD_MODNAME=\"dynaswap_drv\"",
-                "MODULE"
+                "__GNUC__",
+                "KBUILD_STR(s)=#s"
             ],
             "compilerPath": "/usr/bin/clang",
             "intelliSenseMode": "linux-clang-x64",

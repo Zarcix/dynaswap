@@ -6,14 +6,17 @@
 #include <linux/blk-mq.h>
 #include "dynamap.h"
 
+#define DYNAMAP_LOCATION "/home/personal/dynaswap"
+
 #define BLKDEV_NAME     "dynaswap"
 #define BLK_SECTOR_SIZE  512
 #define BLK_CAPACITY_GB  128
 
 static int block_major = 0;
 static struct gendisk *dynaswap_disk;
-static struct blk_mq_tag_set tag_set; // TODO: what is this?
+static struct blk_mq_tag_set tag_set;
 static struct xarray dynaswap_mapping;
+static struct dynamap_ctx dynamap;
 
 #pragma region Request Handling
 
@@ -174,6 +177,7 @@ static void dynaswap_unregister_blockdev(void) {
 static void dynaswap_destroy_mapping(void) {
     pr_info("dynaswap: destroying xarray\n");
     xa_destroy(&dynaswap_mapping);
+    dynamap_cleanup(&dynamap);
 }
 
 static void __exit dynaswap_module_exit(void) {
@@ -201,6 +205,7 @@ static const struct block_device_operations file_ops = {
 
 static int dynaswap_init_mapping(void) {
     xa_init(&dynaswap_mapping);
+    dynamap_init(&dynamap, DYNAMAP_LOCATION);
     pr_debug("dynaswap: mapping initialized\n");
     return 0;
 }

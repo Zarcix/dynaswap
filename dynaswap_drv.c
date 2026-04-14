@@ -1,6 +1,7 @@
 #define DEBUG
 
 #include <linux/module.h>
+#include <linux/workqueue.h>
 #include <linux/fs.h>
 #include <linux/blkdev.h>
 #include <linux/blk-mq.h>
@@ -10,7 +11,7 @@
 
 #define BLKDEV_NAME     "dynaswap"
 #define BLK_SECTOR_SIZE  512
-#define BLK_CAPACITY_GB  128
+#define BLK_CAPACITY_GB  64
 
 static int block_major = 0;
 static struct gendisk *dynaswap_disk;
@@ -18,116 +19,71 @@ static struct blk_mq_tag_set tag_set;
 static struct xarray dynaswap_mapping;
 static struct dynamap_ctx dynamap;
 
+struct dynaswap_work {
+    struct work_struct work;
+    struct request *work_req;
+    struct dynamap_ctx *work_context;
+};
+
 #pragma region Request Handling
 
-static unsigned long dynaswap_get_map_size(void) {
-    unsigned long count = 0;
-    void *entry;
-    unsigned long index;
+static void dynaswap_process_work(struct work_struct *work) {
+    struct dynaswap_work *dw = container_of(work, struct dynaswap_work, work);
 
-    xa_for_each(&dynaswap_mapping, index, entry) {
-        count++;
-    }
-
-    return count;
-}
-
-static blk_status_t dynaswap_handle_rq(struct blk_mq_hw_ctx *hctx, const struct blk_mq_queue_data *bd) {
-    struct request *req = bd->rq;
-
-    pr_debug("dynaswap: beginning request\n");
-    blk_mq_start_request(req);
-
+    struct request *req = dw->work_req;
     unsigned int operation = req_op(req);
-    sector_t req_position = blk_rq_pos(req);
-    pr_debug("dynaswap: request at pos %llu (op %u)\n", 
-             (unsigned long long)req_position, operation);
-
-    if (operation == REQ_OP_DISCARD) {
-        sector_t start = blk_rq_pos(req);
-        sector_t end = start + blk_rq_sectors(req);
-        pr_debug("dynaswap: discarding from swap (idx %llu - idx %llu)\n", start, end);
-        
-        for (; start < end; start += 8) { // Jump by page sizes
-            unsigned long index = start >> 3;
-            struct page *p = xa_erase(&dynaswap_mapping, index);
-            if (p) {
-                __free_page(p); // Actually give the memory back to the system!
-            }
-        }
-
-        #ifdef DEBUG
-
-        auto dynaswap_page_count = dynaswap_get_map_size();
-        pr_info("dynaswap: currently holding %lu pages (%lu KB)\n",
-            dynaswap_page_count, dynaswap_page_count * 4);
-
-        #endif
-
-        blk_mq_end_request(req, BLK_STS_OK);
-        return BLK_STS_OK;
-    }
+    struct dynamap_ctx *ctx = dw->work_context;
 
     struct bio_vec bvec;
     struct req_iterator iter;
     rq_for_each_segment(bvec, req, iter) {
-        sector_t current_sector = iter.iter.bi_sector;
-        unsigned long page_index = current_sector >> (PAGE_SHIFT - 9);
+        sector_t sector = iter.iter.bi_sector;
+        struct page *page = bvec.bv_page;
 
-        void *kaddr = kmap_local_page(bvec.bv_page);
-
-        struct page *p;
-        void *mem_page = bvec.bv_offset + kaddr;
         switch (operation) {
-            case REQ_OP_WRITE: {
-                pr_debug("dynaswap: write to swap (idx %lu)\n", page_index);
-                p = xa_load(&dynaswap_mapping, page_index);
-                if (!p) {
-                    p = alloc_page(GFP_ATOMIC);
-                }
-
-                if (!p) {
-                    blk_mq_end_request(req, BLK_STS_RESOURCE);
-                    return BLK_STS_OK;
-                }
-
-                xa_store(&dynaswap_mapping, page_index, p, GFP_ATOMIC);
-
-                void *dest = kmap_local_page(p);
-                memcpy(dest, mem_page, bvec.bv_len);
-                kunmap_local(dest);
-
+            case REQ_OP_WRITE:{
+                dynaswap_write(ctx, sector, page);
                 break;
             }
+
             case REQ_OP_READ: {
-                pr_debug("dynaswap: reading from swap (idx %lu)\n", page_index);
-                p = xa_load(&dynaswap_mapping, page_index);
+                dynaswap_read(ctx, sector, page);
+                break;
+            }
 
-                if (!p) {
-                    memset(mem_page, 0, bvec.bv_len);
-                    break;
-                }
-
-                void *src = kmap_local_page(p);
-                memcpy(mem_page, src, bvec.bv_len);
-                kunmap_local(src);
-
+            case REQ_OP_DISCARD: {
+                sector_t start = blk_rq_pos(req);
+                sector_t end = start + blk_rq_sectors(req);
+                dynaswap_discard(ctx, sector, end);
                 break;
             }
         }
-
-        kunmap_local(kaddr);
     }
 
-    #ifdef DEBUG
-
-    auto dynaswap_page_count = dynaswap_get_map_size();
-    pr_info("dynaswap: currently holding %lu pages (%lu KB)\n",
-         dynaswap_page_count, dynaswap_page_count * 4);
-
-    #endif
-
     blk_mq_end_request(req, BLK_STS_OK);
+    kfree(dw);
+}
+
+static blk_status_t dynaswap_handle_rq(struct blk_mq_hw_ctx *hctx, const struct blk_mq_queue_data *bd)
+{
+    struct request *req = bd->rq;
+    struct dynaswap_work *dw;
+
+    blk_mq_start_request(req);
+
+    // Allocate a small wrapper to carry the request to the worker
+    dw = kmalloc(sizeof(*dw), GFP_ATOMIC);
+    if (!dw) return BLK_STS_RESOURCE;
+
+    dw->work_req = req;
+    dw->work_context = &dynamap;
+
+    // Initialize the work with our handler function
+    INIT_WORK(&dw->work, dynaswap_process_work);
+
+    // Schedule the work on the system-wide workqueue
+    schedule_work(&dw->work);
+
     return BLK_STS_OK;
 }
 
@@ -230,7 +186,7 @@ static int dynaswap_init_tag_set(void) {
     tag_set.nr_hw_queues = 1;
     tag_set.queue_depth = 128;
     tag_set.numa_node = NUMA_NO_NODE;
-    tag_set.flags = 0;
+    tag_set.flags = BLK_MQ_F_BLOCKING;
 
     ret = blk_mq_alloc_tag_set(&tag_set);
     if (ret) {

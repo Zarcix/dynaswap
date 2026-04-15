@@ -3,63 +3,121 @@
 #include <linux/blkdev.h>
 #include "dynamap.h"
 
+#define FILE_OPEN_FLAGS O_RDWR | O_CREAT | O_TRUNC | O_LARGEFILE
+
+#pragma region DynaSwap Parameters
+
+#pragma region Scaling Thresholds
+
+/* Scaling Constants */
+static u8 inflate_threshold_percent = 80;
+static u8 deflate_threshold_percent = 30;
+
+module_param_named(inflate_threshold, inflate_threshold_percent, byte, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+MODULE_PARM_DESC(
+    inflate_threshold,
+    "Percent where DynaSwap's backing file will self inflate (default: 80%)"
+);
+module_param_named(deflate_threshold, deflate_threshold_percent, byte, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+MODULE_PARM_DESC(
+    deflate_threshold,
+    "Percent where DynaSwap backing file will self deflate (default: 50%)"
+);
+
+#pragma endregion
+
+#pragma region Scaling Behavior
+
+/* IO Constants */
+static u8 deflate_amount_percent = 70;
+
+module_param_named(deflate_target, deflate_amount_percent, byte, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+MODULE_PARM_DESC(
+    deflate_target,
+    "The target utilization percentage to reach after a deflation event (default 70%)"
+);
+
+#pragma endregion
+
+#pragma region Memory Layout
+
+#define DYNAMAP_DEFAULT_CHUNK_SIZE (1 * 1024 * 1024 * 1024)
+
+static u32 chunk_size = DYNAMAP_DEFAULT_CHUNK_SIZE;
+module_param_named(chunk_size, chunk_size, uint, S_IRUSR | S_IRGRP | S_IROTH);
+MODULE_PARM_DESC(chunk_size, "Size of DynaSwap chunks in bytes (default: 128MB)");
+
+static u32 slots_per_chunk;
+
+#pragma endregion
+
+#pragma endregion
+
 #pragma region Helper Functions
 
-int dynaswap_extend(struct dynamap_ctx *ctx) {
-    pr_debug("dynaswap: beginning to extend storage\n");
-    loff_t current_end = (loff_t)ctx->total_slots * PAGE_SIZE;
-    int ret = vfs_fallocate(ctx->backing_file, 0, current_end, DYNAMAP_CHUNK_SIZE);
-    if (ret) {
-        pr_err("dynamswap: could not fallocate more space (err %d)\n", ret);
-        return ret;
+/**
+ * This function returns true when one of three conditions are true.
+ * 1. The total amount of slots is 0
+ * 2. There are no more free slots left
+ * 3. When the usage percent of slots is at or above the INFLATE_THRESHOLD_PERCENT
+ */
+static int dynaswap_should_extend(struct dynamap_ctx *ctx) {
+    unsigned long total = atomic_long_read(&ctx->total_slots);
+    unsigned long active = atomic_long_read(&ctx->active_slots);
+
+    if (total == 0 || llist_empty(&ctx->free_slots)) {
+        return 1;
     }
 
-    pr_debug("dynaswap: allocation finished, getting slots per chunk\n");
-    for (int i = SLOTS_PER_CHUNK; i > 0; i--) {
+    unsigned long usage_percent = (active * 100) / total;
+    return usage_percent >= inflate_threshold_percent;
+}
+
+static int dynaswap_extend(struct dynamap_ctx *ctx) {
+    int ret = 0;
+
+    down_write(&ctx->mapping_rwsem);
+
+    if (!dynaswap_should_extend(ctx)) {
+        goto out;
+    }
+
+    pr_debug("dynaswap: beginning to extend storage\n");
+    unsigned long slot_count = atomic_long_read(&ctx->total_slots);
+    loff_t current_end = (loff_t)slot_count * PAGE_SIZE;
+
+    ret = vfs_fallocate(ctx->backing_file, 0, current_end, chunk_size);
+    if (ret) {
+        pr_err("dynamswap: could not fallocate space (err: %d)\n", ret);
+        goto out;
+    }
+
+    for (int i = slots_per_chunk; i > 0; i--) {
         struct slot_entry *entry = kmalloc(sizeof(*entry), GFP_NOIO);
         if (!entry) break;
 
-        entry->index = ctx->total_slots + i;
+        entry->index = slot_count + i;
         llist_add(&entry->node, &ctx->free_slots);
     }
 
-    ctx->total_slots += SLOTS_PER_CHUNK;
-
-    pr_info("dynaswap: expanded storage (%lu total slots)\n", ctx->total_slots);
-    return 0;
+    atomic_long_add(slots_per_chunk, &ctx->total_slots);
+    pr_info("dynaswap: expanded storage (%lu total slots)\n", atomic_long_read(&ctx->total_slots));
+    out:
+        up_write(&ctx->mapping_rwsem);
+        return ret;
 }
 
-unsigned long dynaswap_acquire_slot(struct dynamap_ctx *ctx, unsigned int page_idx) {
+static unsigned long dynaswap_acquire_slot(struct dynamap_ctx *ctx, unsigned int page_idx) {
     void *entry_ptr = xa_load(&ctx->xa_virt_to_phys, page_idx);
 
     // 1. Existing mapping check (no change here)
     if (entry_ptr && xa_is_value(entry_ptr)) 
         return xa_to_value(entry_ptr);
 
-    // 2. Proactive Expansion Check (Watermark)
-    unsigned long active = (unsigned long)atomic_read(&ctx->active_slots);
-    
-    /* * Trigger expansion if:
-     * a) We have 0 slots (initial state)
-     * b) We are 50% full (active >= total / 2)
-     * c) We are literally out of pre-allocated llist nodes
-     */
-    if (ctx->total_slots == 0 || active >= (ctx->total_slots / 2) || llist_empty(&ctx->free_slots)) {
-        
-        /* Optional: Avoid spamming extend if we just extended but 
-           haven't processed enough to drop below 50% again. 
-           In a simple driver, dynaswap_extend will just bump total_slots, 
-           immediately fixing the 'active >= total/2' condition. */
-           
-        pr_debug("dynaswap: proactive expansion (active: %lu/%lu)\n", active, ctx->total_slots);
-        if (dynaswap_extend(ctx)) {
-            // If we fail to extend but still have some free_slots left, we can continue.
-            // If we have 0 free_slots AND extend failed, we must bail.
-            if (llist_empty(&ctx->free_slots)) {
-                pr_err("dynaswap: hard exhaustion, no slots available\n");
-                return 0;
-            }
-        }
+    if (dynaswap_should_extend(ctx)) {
+        up_read(&ctx->mapping_rwsem);
+        dynaswap_extend(ctx);
+        down_read(&ctx->mapping_rwsem);
     }
 
     struct llist_node *node = llist_del_first(&ctx->free_slots);
@@ -73,8 +131,8 @@ unsigned long dynaswap_acquire_slot(struct dynamap_ctx *ctx, unsigned int page_i
     kfree(entry);
 
     xa_store(&ctx->xa_virt_to_phys, page_idx, xa_mk_value(p_slot), GFP_NOIO);
-    xa_store(&ctx->xa_phys_to_virt, p_slot, xa_mk_value(page_idx), GFP_NOIO);
-    atomic_inc(&ctx->active_slots);
+    // xa_store(&ctx->xa_phys_to_virt, p_slot, xa_mk_value(page_idx), GFP_NOIO);
+    atomic_long_inc(&ctx->active_slots);
 
     return p_slot;
 }
@@ -86,7 +144,7 @@ unsigned long dynaswap_acquire_slot(struct dynamap_ctx *ctx, unsigned int page_i
 void dynaswap_read(struct dynamap_ctx *ctx, sector_t sector, struct page *page) {
     unsigned long page_index = sector >> (PAGE_SHIFT - 9);
 
-    mutex_lock(&ctx->lock);
+    down_read(&ctx->mapping_rwsem);
 
     void *entry = xa_load(&ctx->xa_virt_to_phys, page_index);
     if (!entry || !xa_is_value(entry)) {
@@ -95,9 +153,7 @@ void dynaswap_read(struct dynamap_ctx *ctx, sector_t sector, struct page *page) 
         void *vaddr = kmap_local_page(page);
         memset(vaddr, 0, PAGE_SIZE);
         kunmap_local(vaddr);
-
-        mutex_unlock(&ctx->lock);
-        return;
+        goto out;
     }
 
     unsigned long p_slot = xa_to_value(entry);
@@ -110,59 +166,67 @@ void dynaswap_read(struct dynamap_ctx *ctx, sector_t sector, struct page *page) 
     kernel_read(ctx->backing_file, vaddr, PAGE_SIZE, &bd_offset);
     kunmap_local(vaddr);
 
-    mutex_unlock(&ctx->lock);
+    out:
+        up_read(&ctx->mapping_rwsem);
 }
 
 void dynaswap_write(struct dynamap_ctx *ctx, sector_t sector, struct page *page) {
     unsigned long page_index = sector >> (PAGE_SHIFT - 9);
     unsigned int flags = memalloc_noio_save();
-    mutex_lock(&ctx->lock);
+    down_read(&ctx->mapping_rwsem);
 
     unsigned long p_slot = dynaswap_acquire_slot(ctx, page_index);
     if (!p_slot) {
-        mutex_unlock(&ctx->lock);
-        return;
+        goto out;
     }
 
     loff_t bd_offset = (loff_t)(p_slot - 1) * PAGE_SIZE;
 
-    unsigned long active_count = (unsigned long)atomic_read(&ctx->active_slots);
+    unsigned long active_count = atomic_long_read(&ctx->active_slots);
+    unsigned long total_slots = atomic_long_read(&ctx->total_slots);
 
-    pr_debug("dynaswap: wrote to dynaswap (page_idx: %lu, bd_offset: %lld, remaining_slots: %lu)\n", page_index, bd_offset, ctx->total_slots - active_count);
+    pr_debug("dynaswap: wrote to dynaswap (page_idx: %lu, bd_offset: %lld, remaining_slots: %lu)\n", page_index, bd_offset, total_slots - active_count);
 
     void *page_addr = kmap_local_page(page);
     kernel_write(ctx->backing_file, page_addr, PAGE_SIZE, &bd_offset);
     kunmap_local(page_addr);
 
-    mutex_unlock(&ctx->lock);
-    memalloc_noio_restore(flags);
+    out:
+        up_read(&ctx->mapping_rwsem);
+        memalloc_noio_restore(flags);
 }
 
 void dynaswap_discard(struct dynamap_ctx *ctx, sector_t sector_start, sector_t sector_end) {
-
+    pr_debug("dynaswap: running discard (idx %llu - idx %llu)", sector_start, sector_end);
 }
 
 #pragma endregion
 
 #pragma region Setup and Teardown
 
-#define FILE_OPEN_FLAGS O_RDWR | O_CREAT | O_TRUNC | O_LARGEFILE
-
 int dynamap_init(struct dynamap_ctx *ctx, const char *path) {
+    if (!IS_ALIGNED(chunk_size, PAGE_SIZE)) {
+        pr_err("dynaswap: chunk_size must be a multiple of PAGE_SIZE (%lu)\n", PAGE_SIZE);
+        return -EINVAL;
+    }
+
+    slots_per_chunk = chunk_size / PAGE_SIZE;
+
     xa_init(&ctx->xa_virt_to_phys);
-    xa_init(&ctx->xa_phys_to_virt);
+    // xa_init(&ctx->xa_phys_to_virt);
 
     init_llist_head(&ctx->free_slots);
-    ctx->total_slots = 0;
-    atomic_set(&ctx->active_slots, 0);
+    atomic_long_set(&ctx->total_slots, 0);
+    atomic_long_set(&ctx->active_slots, 0);
 
     ctx->backing_file = filp_open(path, FILE_OPEN_FLAGS, 0600);
     if (IS_ERR(ctx->backing_file)) {
-        pr_err("dynaswap: Failed to open backing file %s\n", path);
-        return PTR_ERR(ctx->backing_file);
+        int err = (int)PTR_ERR(ctx->backing_file);
+        pr_err("dynaswap: Failed to open backing file %s (error %d)\n", path, err);
+        return err;
     }
 
-    mutex_init(&ctx->lock);
+    init_rwsem(&ctx->mapping_rwsem);
 
     pr_info("dynaswap: initialization of dynaswap backing finished\n");
     return 0;
@@ -181,7 +245,7 @@ void dynamap_cleanup(struct dynamap_ctx *ctx) {
     }
 
     xa_destroy(&ctx->xa_virt_to_phys);
-    xa_destroy(&ctx->xa_phys_to_virt);
+    // xa_destroy(&ctx->xa_phys_to_virt);
     pr_debug("dynaswap: mapping xarrays destroyed\n");
 
     struct llist_node *node, *next;
@@ -195,8 +259,8 @@ void dynamap_cleanup(struct dynamap_ctx *ctx) {
 
     pr_debug("dynaswap: free slot list cleared\n");
 
-    ctx->total_slots = 0;
-    atomic_set(&ctx->active_slots, 0);
+    atomic_long_set(&ctx->total_slots, 0);
+    atomic_long_set(&ctx->active_slots, 0);
 
     pr_info("dynaswap: cleanup finished\n");
 }

@@ -7,11 +7,28 @@
 #include <linux/blk-mq.h>
 #include "dynamap.h"
 
-#define DYNAMAP_LOCATION "/home/personal/dynaswap"
+#pragma region Device Configuration
 
-#define BLKDEV_NAME     "dynaswap"
+#pragma region Hard Constants
+
+#define BLKDEV_NAME      "dynaswap"
 #define BLK_SECTOR_SIZE  512
-#define BLK_CAPACITY_GB  64
+
+#pragma endregion
+
+#pragma region Module Parameters
+
+static char *dynamap_location = NULL;
+module_param_named(path, dynamap_location, charp, S_IRUSR | S_IRGRP | S_IROTH);
+MODULE_PARM_DESC(path, "Path to the backing file for DynaSwap");
+
+static uint blk_capacity_gb = 64;
+module_param_named(capacity_gb, blk_capacity_gb, uint, S_IRUSR | S_IRGRP | S_IROTH);
+MODULE_PARM_DESC(capacity_gb, "Capacity of the block device in Gigabytes (default: 64GB)");
+
+#pragma endregion
+
+#pragma endregion
 
 static int block_major = 0;
 static struct gendisk *dynaswap_disk;
@@ -36,6 +53,14 @@ static void dynaswap_process_work(struct work_struct *work) {
 
     struct bio_vec bvec;
     struct req_iterator iter;
+
+    if (operation == REQ_OP_DISCARD) {
+        sector_t start = blk_rq_pos(req);
+        sector_t end = start + blk_rq_sectors(req);
+        dynaswap_discard(ctx, start, end);
+        goto end;
+    }
+
     rq_for_each_segment(bvec, req, iter) {
         sector_t sector = iter.iter.bi_sector;
         struct page *page = bvec.bv_page;
@@ -51,15 +76,14 @@ static void dynaswap_process_work(struct work_struct *work) {
                 break;
             }
 
-            case REQ_OP_DISCARD: {
-                sector_t start = blk_rq_pos(req);
-                sector_t end = start + blk_rq_sectors(req);
-                dynaswap_discard(ctx, sector, end);
+            default: {
+                pr_alert("dynaswap: received unknown operation: %d\n", operation);
                 break;
             }
         }
     }
 
+end:
     blk_mq_end_request(req, BLK_STS_OK);
     kfree(dw);
 }
@@ -160,10 +184,15 @@ static const struct block_device_operations file_ops = {
 };
 
 static int dynaswap_init_mapping(void) {
+    if (dynamap_location == NULL) {
+        pr_err("dynaswap: ERROR - 'path' parameter is required.\n");
+        pr_err("Usage: insmod dynaswap.ko path=/path/to/file\n");
+        return -EINVAL; // Invalid Argument
+    }
     xa_init(&dynaswap_mapping);
-    dynamap_init(&dynamap, DYNAMAP_LOCATION);
+    int status = dynamap_init(&dynamap, dynamap_location);
     pr_debug("dynaswap: mapping initialized\n");
-    return 0;
+    return status;
 }
 
 static int dynaswap_register_blockdev(void) {
@@ -232,7 +261,7 @@ static int dynaswap_setup_disk(void) {
     dynaswap_disk->queue->limits.discard_granularity = PAGE_SIZE;
 
     /* capacity */
-    capacity = BLK_CAPACITY_GB * 1024 * 1024 * 2;
+    capacity = blk_capacity_gb * 1024 * 1024 * 2;
     set_capacity(dynaswap_disk, capacity);
 
     pr_debug("dynaswap: disk configured (capacity=%llu sectors)\n",

@@ -3,7 +3,7 @@
 #include <linux/blkdev.h>
 #include "dynamap.h"
 
-#define FILE_OPEN_FLAGS O_RDWR | O_CREAT | O_TRUNC | O_LARGEFILE
+#define FILE_OPEN_FLAGS O_DIRECT | O_RDWR | O_CREAT | O_TRUNC | O_LARGEFILE
 
 #pragma region DynaSwap Parameters
 
@@ -41,7 +41,7 @@ MODULE_PARM_DESC(
 
 #pragma region Memory Layout
 
-#define DYNAMAP_DEFAULT_CHUNK_SIZE (1 * 1024 * 1024 * 1024)
+#define DYNAMAP_DEFAULT_CHUNK_SIZE (128 * 1024 * 1024)
 
 static u32 chunk_size = DYNAMAP_DEFAULT_CHUNK_SIZE;
 module_param_named(chunk_size, chunk_size, uint, S_IRUSR | S_IRGRP | S_IROTH);

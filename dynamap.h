@@ -8,9 +8,12 @@
 
 #define DYNASWAP_EXTENDING 0
 
+#define BLK_SECTOR_SIZE  512
+
 struct slot_entry {
-    unsigned long index;
     struct llist_node node;
+    unsigned long index;
+    unsigned long virt_page;
 };
 
 
@@ -18,7 +21,6 @@ struct dynamap_ctx {
     struct file *backing_file;
 
     struct xarray xa_virt_to_phys;
-    struct xarray xa_phys_to_virt;
 
     struct llist_head free_slots;
 

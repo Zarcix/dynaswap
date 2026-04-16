@@ -12,7 +12,6 @@
 #pragma region Hard Constants
 
 #define BLKDEV_NAME      "dynaswap"
-#define BLK_SECTOR_SIZE  512
 
 #pragma endregion
 
@@ -55,9 +54,13 @@ static void dynaswap_process_work(struct work_struct *work) {
     struct req_iterator iter;
 
     if (operation == REQ_OP_DISCARD) {
+        sector_t nr_sectors = blk_rq_sectors(req);
         sector_t start = blk_rq_pos(req);
-        sector_t end = start + blk_rq_sectors(req);
-        dynaswap_discard(ctx, start, end);
+
+        if (nr_sectors > 0) {
+            dynaswap_discard(ctx, start, nr_sectors);
+        }
+
         goto end;
     }
 

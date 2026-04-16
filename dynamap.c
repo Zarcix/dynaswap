@@ -41,11 +41,11 @@ MODULE_PARM_DESC(
 
 #pragma region Memory Layout
 
-#define DYNAMAP_DEFAULT_CHUNK_SIZE (128 * 1024 * 1024)
+#define DYNAMAP_DEFAULT_CHUNK_SIZE (256 * 1024 * 1024)
 
 static u32 chunk_size = DYNAMAP_DEFAULT_CHUNK_SIZE;
 module_param_named(chunk_size, chunk_size, uint, S_IRUSR | S_IRGRP | S_IROTH);
-MODULE_PARM_DESC(chunk_size, "Size of DynaSwap chunks in bytes (default: 128MB)");
+MODULE_PARM_DESC(chunk_size, "Size of DynaSwap chunks in bytes (default: 256MB)");
 
 static u32 slots_per_chunk;
 
@@ -76,12 +76,6 @@ static int dynaswap_should_extend(struct dynamap_ctx *ctx) {
 static int dynaswap_extend(struct dynamap_ctx *ctx) {
     int ret = 0;
 
-    down_write(&ctx->mapping_rwsem);
-
-    if (!dynaswap_should_extend(ctx)) {
-        goto out;
-    }
-
     pr_debug("dynaswap: beginning to extend storage\n");
     unsigned long slot_count = atomic_long_read(&ctx->total_slots);
     loff_t current_end = (loff_t)slot_count * PAGE_SIZE;
@@ -89,6 +83,12 @@ static int dynaswap_extend(struct dynamap_ctx *ctx) {
     ret = vfs_fallocate(ctx->backing_file, 0, current_end, chunk_size);
     if (ret) {
         pr_err("dynamswap: could not fallocate space (err: %d)\n", ret);
+        goto out;
+    }
+
+    down_write(&ctx->mapping_rwsem);
+
+    if (atomic_long_read(&ctx->total_slots) > slot_count) {
         goto out;
     }
 
@@ -101,7 +101,9 @@ static int dynaswap_extend(struct dynamap_ctx *ctx) {
     }
 
     atomic_long_add(slots_per_chunk, &ctx->total_slots);
+
     pr_info("dynaswap: expanded storage (%lu total slots)\n", atomic_long_read(&ctx->total_slots));
+
     out:
         up_write(&ctx->mapping_rwsem);
         return ret;
@@ -159,9 +161,6 @@ void dynaswap_read(struct dynamap_ctx *ctx, sector_t sector, struct page *page) 
     unsigned long p_slot = xa_to_value(entry);
     loff_t bd_offset = (p_slot - 1) * PAGE_SIZE;
 
-    pr_debug("dynaswap: reading from dynaswap (page_idx: %lu, p_slot: %lu, file_offset: %lld)\n",
-        page_index, p_slot, bd_offset);
-
     void *vaddr = kmap_local_page(page);
     kernel_read(ctx->backing_file, vaddr, PAGE_SIZE, &bd_offset);
     kunmap_local(vaddr);
@@ -184,8 +183,6 @@ void dynaswap_write(struct dynamap_ctx *ctx, sector_t sector, struct page *page)
 
     unsigned long active_count = atomic_long_read(&ctx->active_slots);
     unsigned long total_slots = atomic_long_read(&ctx->total_slots);
-
-    pr_debug("dynaswap: wrote to dynaswap (page_idx: %lu, bd_offset: %lld, remaining_slots: %lu)\n", page_index, bd_offset, total_slots - active_count);
 
     void *page_addr = kmap_local_page(page);
     kernel_write(ctx->backing_file, page_addr, PAGE_SIZE, &bd_offset);

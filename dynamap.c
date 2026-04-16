@@ -76,6 +76,10 @@ static int dynaswap_should_extend(struct dynamap_ctx *ctx) {
 static int dynaswap_extend(struct dynamap_ctx *ctx) {
     int ret = 0;
 
+    if (test_and_set_bit(DYNASWAP_EXTENDING, &ctx->flags)) {
+        return 0;
+    }
+
     pr_debug("dynaswap: beginning to extend storage\n");
     unsigned long slot_count = atomic_long_read(&ctx->total_slots);
     loff_t current_end = (loff_t)slot_count * PAGE_SIZE;
@@ -83,13 +87,13 @@ static int dynaswap_extend(struct dynamap_ctx *ctx) {
     ret = vfs_fallocate(ctx->backing_file, 0, current_end, chunk_size);
     if (ret) {
         pr_err("dynamswap: could not fallocate space (err: %d)\n", ret);
-        goto out;
+        goto release_bit;
     }
 
     down_write(&ctx->mapping_rwsem);
 
     if (atomic_long_read(&ctx->total_slots) > slot_count) {
-        goto out;
+        goto unlock;
     }
 
     for (int i = slots_per_chunk; i > 0; i--) {
@@ -104,8 +108,10 @@ static int dynaswap_extend(struct dynamap_ctx *ctx) {
 
     pr_info("dynaswap: expanded storage (%lu total slots)\n", atomic_long_read(&ctx->total_slots));
 
-    out:
+    unlock:
         up_write(&ctx->mapping_rwsem);
+    release_bit:
+        clear_bit(DYNASWAP_EXTENDING, &ctx->flags);
         return ret;
 }
 

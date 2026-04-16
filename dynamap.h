@@ -6,6 +6,8 @@
 #include <linux/llist.h>
 #include <linux/types.h>
 
+#define DYNASWAP_EXTENDING 0
+
 struct slot_entry {
     unsigned long index;
     struct llist_node node;
@@ -24,6 +26,7 @@ struct dynamap_ctx {
     atomic_long_t active_slots;
 
     struct rw_semaphore mapping_rwsem;
+    unsigned long flags;
 };
 
 // IO Operations

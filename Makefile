@@ -1,5 +1,5 @@
 obj-m := dynaswap.o
-dynaswap-y := dynaswap_drv.o dynamap.o
+dynaswap-y := dynaswap_drv.o dynamap.o dynaswap_sys.o
 
 LLVM_FLAGS := LLVM=1 CC=clang
 

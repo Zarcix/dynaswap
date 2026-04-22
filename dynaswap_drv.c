@@ -1,10 +1,13 @@
 #define DEBUG
+#undef DEBUG
 
 #include <linux/module.h>
 #include <linux/workqueue.h>
 #include <linux/fs.h>
 #include <linux/blkdev.h>
 #include <linux/blk-mq.h>
+
+#include "dynaswap_sys.h"
 #include "dynamap.h"
 
 #pragma region Device Configuration
@@ -21,9 +24,9 @@ static char *dynamap_location = NULL;
 module_param_named(path, dynamap_location, charp, S_IRUSR | S_IRGRP | S_IROTH);
 MODULE_PARM_DESC(path, "Path to the backing file for DynaSwap");
 
-static uint blk_capacity_gb = 64;
+static uint blk_capacity_gb = 512;
 module_param_named(capacity_gb, blk_capacity_gb, uint, S_IRUSR | S_IRGRP | S_IROTH);
-MODULE_PARM_DESC(capacity_gb, "Capacity of the block device in Gigabytes (default: 64GB)");
+MODULE_PARM_DESC(capacity_gb, "Capacity of the block device in Gigabytes (default: 512G)");
 
 #pragma endregion
 
@@ -91,8 +94,7 @@ end:
     kfree(dw);
 }
 
-static blk_status_t dynaswap_handle_rq(struct blk_mq_hw_ctx *hctx, const struct blk_mq_queue_data *bd)
-{
+static blk_status_t dynaswap_handle_rq(struct blk_mq_hw_ctx *hctx, const struct blk_mq_queue_data *bd) {
     struct request *req = bd->rq;
     struct dynaswap_work *dw;
 
@@ -170,6 +172,7 @@ static void __exit dynaswap_module_exit(void) {
     dynaswap_free_tag_set();
     dynaswap_unregister_blockdev();
     dynaswap_destroy_mapping();
+    dynaswap_debugfs_exit();
 
     pr_info("dynaswap: cleanup finished\n");
 }
@@ -302,6 +305,9 @@ static int __init dynaswap_module_init(void) {
     if (status) return dynaswap_init_err(status);
 
     status = add_disk(dynaswap_disk);
+    if (status) return dynaswap_init_err(status);
+
+    status = dynaswap_debugfs_init();
     if (status) return dynaswap_init_err(status);
 
     pr_info("dynaswap: initialization complete\n");

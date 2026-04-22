@@ -31,6 +31,8 @@ struct dynamap_ctx {
     unsigned long flags;
 };
 
+extern struct dynamap_ctx dynamap;
+
 // IO Operations
 void dynaswap_write(struct dynamap_ctx *ctx, sector_t sector, struct page *page);
 void dynaswap_read(struct dynamap_ctx *ctx, sector_t sector, struct page *page);

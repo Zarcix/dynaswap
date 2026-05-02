@@ -210,8 +210,10 @@ void dynamap_cleanup(struct dynamap_ctx *ctx) {
     }
 
     // Bitmaps
-    kvfree(ctx->slot_bitmap);
-    ctx->slot_bitmap = NULL;
+    if (ctx->slot_bitmap) {
+        kvfree(ctx->slot_bitmap);
+        ctx->slot_bitmap = NULL;
+    }
 
     // Slot Mapping
     if (ctx->virt_to_phys_map) {

@@ -7,7 +7,6 @@
 #include <linux/blkdev.h>
 #include <linux/blk-mq.h>
 
-#include "dynaswap_sys.h"
 #include "dynamap.h"
 
 #pragma region Device Configuration
@@ -24,7 +23,7 @@ static char *dynamap_location = NULL;
 module_param_named(path, dynamap_location, charp, S_IRUSR | S_IRGRP | S_IROTH);
 MODULE_PARM_DESC(path, "Path to the backing file for DynaSwap");
 
-static uint blk_capacity_gb = 512;
+static uint blk_capacity_gb = 1024;
 module_param_named(capacity_gb, blk_capacity_gb, uint, S_IRUSR | S_IRGRP | S_IROTH);
 MODULE_PARM_DESC(capacity_gb, "Capacity of the block device in Gigabytes (default: 512G)");
 
@@ -172,7 +171,6 @@ static void __exit dynaswap_module_exit(void) {
     dynaswap_free_tag_set();
     dynaswap_unregister_blockdev();
     dynaswap_destroy_mapping();
-    dynaswap_debugfs_exit();
 
     pr_info("dynaswap: cleanup finished\n");
 }
@@ -196,7 +194,9 @@ static int dynaswap_init_mapping(void) {
         return -EINVAL; // Invalid Argument
     }
     xa_init(&dynaswap_mapping);
-    int status = dynamap_init(&dynamap, dynamap_location);
+
+    size_t total_capacity = (size_t)blk_capacity_gb * 1024 * 1024 * 1024;
+    int status = dynamap_init(&dynamap, dynamap_location, total_capacity);
     pr_debug("dynaswap: mapping initialized\n");
     return status;
 }
@@ -305,9 +305,6 @@ static int __init dynaswap_module_init(void) {
     if (status) return dynaswap_init_err(status);
 
     status = add_disk(dynaswap_disk);
-    if (status) return dynaswap_init_err(status);
-
-    status = dynaswap_debugfs_init();
     if (status) return dynaswap_init_err(status);
 
     pr_info("dynaswap: initialization complete\n");

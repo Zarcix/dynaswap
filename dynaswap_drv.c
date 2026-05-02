@@ -23,9 +23,9 @@ static char *dynamap_location = NULL;
 module_param_named(path, dynamap_location, charp, S_IRUSR | S_IRGRP | S_IROTH);
 MODULE_PARM_DESC(path, "Path to the backing file for DynaSwap");
 
-static uint blk_capacity_gb = 1024;
+static uint blk_capacity_gb = 128;
 module_param_named(capacity_gb, blk_capacity_gb, uint, S_IRUSR | S_IRGRP | S_IROTH);
-MODULE_PARM_DESC(capacity_gb, "Capacity of the block device in Gigabytes (default: 512G)");
+MODULE_PARM_DESC(capacity_gb, "Capacity of the block device in Gigabytes (default: 128G)");
 
 #pragma endregion
 

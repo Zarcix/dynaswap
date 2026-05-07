@@ -80,7 +80,7 @@ static void dynaswap_process_work(struct work_struct *work) {
     }
 
 end:
-    blk_mq_end_request(req, BLK_STS_OK);
+    blk_mq_end_request(req, status);
     kfree(dw);
 }
 

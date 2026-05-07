@@ -98,6 +98,6 @@ def xarray_overhead_info(block_size_gb):
 
 if __name__ == "__main__":
     # Test with 1TB capacity
-    TEST_GB = 4096
+    TEST_GB = 100
     map_overhead_info(TEST_GB)
     xarray_overhead_info(TEST_GB)

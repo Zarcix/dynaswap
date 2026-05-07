@@ -10,28 +10,14 @@
 #define FILE_OPEN_FLAGS O_DIRECT | O_RDWR | O_CREAT | O_TRUNC | O_LARGEFILE
 
 /* Scaling Constants */
-static unsigned char inflate_threshold_percent = 80;
-module_param_named(inflate_threshold, inflate_threshold_percent, byte, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+static unsigned char expansion_trigger_percent = 80;
+module_param_named(inflate_threshold, expansion_trigger_percent, byte, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
 MODULE_PARM_DESC(
     inflate_threshold,
     "Percent where DynaSwap's backing file will self inflate (default: 80%)"
 );
 
-static unsigned char deflate_threshold_percent = 30;
-module_param_named(deflate_threshold, deflate_threshold_percent, byte, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
-MODULE_PARM_DESC(
-    deflate_threshold,
-    "Percent where DynaSwap backing file will self deflate (default: 50%)"
-);
-
 /* IO Constants */
-static unsigned char deflate_amount_percent = 70;
-module_param_named(deflate_target, deflate_amount_percent, byte, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
-MODULE_PARM_DESC(
-    deflate_target,
-    "The target utilization percentage to reach after a deflation event (default 70%)"
-);
-
 static unsigned long chunk_size = 256UL;
 module_param_named(chunk_size, chunk_size, ulong, S_IRUSR | S_IRGRP | S_IROTH);
 MODULE_PARM_DESC(chunk_size, "Size of DynaSwap chunks in bytes (default: 256MB)");
@@ -47,7 +33,7 @@ static int dynaswap_should_extend(struct dynamap_ctx *ctx) {
     }
 
     unsigned long usage_percent = (active * 100) / total;
-    return usage_percent >= inflate_threshold_percent;
+    return usage_percent >= expansion_trigger_percent;
 }
 
 static void dynaswap_expand_file(struct dynamap_ctx *ctx) {
@@ -85,15 +71,11 @@ void dynaswap_extend(struct work_struct *work) {
     dynaswap_expand_file(ctx);
 }
 
-void dynaswap_truncate(struct work_struct *work) {
-
-}
-
 #pragma endregion
 
 #pragma region Main Functions
 
-void dynaswap_read(struct dynamap_ctx *ctx, sector_t sector, struct page *page) {
+blk_status_t dynaswap_read(struct dynamap_ctx *ctx, sector_t sector, struct page *page) {
     ulong page_index = sector >> SECTOR_INDEX_SHIFT;
     ulong dir = page_index / ENTRIES_PER_PAGE;
     ulong leaf = page_index % ENTRIES_PER_PAGE;
@@ -106,7 +88,7 @@ void dynaswap_read(struct dynamap_ctx *ctx, sector_t sector, struct page *page) 
 
     if (p_slot == ~0UL) {
         clear_highpage(page);
-        return;
+        return BLK_STS_OK;
     }
 
     loff_t block_offset = (loff_t)p_slot << PAGE_SHIFT;
@@ -117,12 +99,15 @@ void dynaswap_read(struct dynamap_ctx *ctx, sector_t sector, struct page *page) 
         // If read fails, zero the page so we don't return random junk
         memset(vaddr, 0, PAGE_SIZE);
         pr_err("dynaswap [READ]: Failed to read slot (slot=%lu, err=%ld)\n", p_slot, (long)ret);
+        kunmap_local(vaddr);
+        return BLK_STS_IOERR;
     }
 
     kunmap_local(vaddr);
+    return BLK_STS_OK;
 }
 
-void dynaswap_write(struct dynamap_ctx *ctx, sector_t sector, struct page *page) {
+blk_status_t dynaswap_write(struct dynamap_ctx *ctx, sector_t sector, struct page *page) {
     ulong page_index = sector >> SECTOR_INDEX_SHIFT;
 
     ulong dir = page_index / ENTRIES_PER_PAGE;
@@ -164,7 +149,7 @@ void dynaswap_write(struct dynamap_ctx *ctx, sector_t sector, struct page *page)
     if (p_slot >= max_slots) {
         pr_err("dynaswap [WRITE]: Out of slots. (max=%lu, used=%lu)\n", max_slots, atomic_long_read(&ctx->active_slots));
         up_write(&ctx->map_rwsem);
-        return;
+        return BLK_STS_NOSPC;
     }
 
     // Update the slot to be in use
@@ -181,9 +166,10 @@ void dynaswap_write(struct dynamap_ctx *ctx, sector_t sector, struct page *page)
     void *page_addr = kmap_local_page(page);
     kernel_write(ctx->backing_file, page_addr, PAGE_SIZE, &block_offset);
     kunmap_local(page_addr);
+    return BLK_STS_OK;
 }
 
-void dynaswap_discard(struct dynamap_ctx *ctx, sector_t sector_start, sector_t nr_sectors) {
+blk_status_t dynaswap_discard(struct dynamap_ctx *ctx, sector_t sector_start, sector_t nr_sectors) {
     ulong start_index = sector_start >> SECTOR_INDEX_SHIFT;
     ulong end_index = (sector_start + nr_sectors) >> SECTOR_INDEX_SHIFT;
     ulong i = start_index;
@@ -222,6 +208,8 @@ void dynaswap_discard(struct dynamap_ctx *ctx, sector_t sector_start, sector_t n
         // Yield to let other tasks run
         cond_resched();
     }
+
+    return BLK_STS_OK;
 }
 
 #pragma endregion
@@ -276,7 +264,6 @@ int dynamap_init(struct dynamap_ctx *ctx, const char *path, size_t total_capacit
         goto fail;
 
     INIT_WORK(&ctx->extend_work, dynaswap_extend);
-    INIT_WORK(&ctx->truncate_work, dynaswap_truncate);
 
     // Semaphores
     init_rwsem(&ctx->map_rwsem);

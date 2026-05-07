@@ -29,12 +29,11 @@ extern struct dynamap_ctx {
 
 // Workqueue Operations
 void dynaswap_extend(struct work_struct *work);
-void dynaswap_truncate(struct work_struct *work);
 
 // IO Operations
-void dynaswap_write(struct dynamap_ctx *ctx, sector_t sector, struct page *page);
-void dynaswap_read(struct dynamap_ctx *ctx, sector_t sector, struct page *page);
-void dynaswap_discard(struct dynamap_ctx *ctx, sector_t sector_start, sector_t sector_end);
+blk_status_t dynaswap_write(struct dynamap_ctx *ctx, sector_t sector, struct page *page);
+blk_status_t dynaswap_read(struct dynamap_ctx *ctx, sector_t sector, struct page *page);
+blk_status_t dynaswap_discard(struct dynamap_ctx *ctx, sector_t sector_start, sector_t sector_end);
 
 // Setup/Teardown
 int dynamap_init(struct dynamap_ctx *ctx, const char *path, size_t total_capacity);

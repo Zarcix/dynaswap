@@ -1,19 +1,22 @@
 #define DEBUG
 
+#include <linux/fs.h>
+#include <linux/falloc.h>
 #include <linux/blkdev.h>
+
 #include "dynamap.h"
 
 #define FILE_OPEN_FLAGS O_DIRECT | O_RDWR | O_CREAT | O_TRUNC | O_LARGEFILE
 
 /* Scaling Constants */
-static u8 inflate_threshold_percent = 80;
-static u8 deflate_threshold_percent = 30;
-
+static unsigned char inflate_threshold_percent = 80;
 module_param_named(inflate_threshold, inflate_threshold_percent, byte, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
 MODULE_PARM_DESC(
     inflate_threshold,
     "Percent where DynaSwap's backing file will self inflate (default: 80%)"
 );
+
+static unsigned char deflate_threshold_percent = 30;
 module_param_named(deflate_threshold, deflate_threshold_percent, byte, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
 MODULE_PARM_DESC(
     deflate_threshold,
@@ -21,25 +24,64 @@ MODULE_PARM_DESC(
 );
 
 /* IO Constants */
-static u8 deflate_amount_percent = 70;
-
+static unsigned char deflate_amount_percent = 70;
 module_param_named(deflate_target, deflate_amount_percent, byte, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
 MODULE_PARM_DESC(
     deflate_target,
     "The target utilization percentage to reach after a deflation event (default 70%)"
 );
 
-#define DYNAMAP_DEFAULT_CHUNK_SIZE (256 * 1024 * 1024)
-
-static u32 chunk_size = DYNAMAP_DEFAULT_CHUNK_SIZE;
-module_param_named(chunk_size, chunk_size, uint, S_IRUSR | S_IRGRP | S_IROTH);
+static unsigned long chunk_size = 256UL;
+module_param_named(chunk_size, chunk_size, ulong, S_IRUSR | S_IRGRP | S_IROTH);
 MODULE_PARM_DESC(chunk_size, "Size of DynaSwap chunks in bytes (default: 256MB)");
+
+#pragma region Helper Functions
+
+static int dynaswap_should_extend(struct dynamap_ctx *ctx) {
+    unsigned long total = atomic_long_read(&ctx->total_slots);
+    unsigned long active = atomic_long_read(&ctx->active_slots);
+
+    if (total == 0) {
+        return 1;
+    }
+
+    unsigned long usage_percent = (active * 100) / total;
+    return usage_percent >= inflate_threshold_percent;
+}
+
+static void dynaswap_expand_file(struct dynamap_ctx *ctx) {
+    struct file *file = ctx->backing_file;
+
+    ulong old_slots = atomic_long_read(&ctx->total_slots);
+    ulong inc_size = (chunk_size * 1024 * 1024) >> PAGE_SHIFT;
+    ulong new_slots = old_slots + inc_size;
+
+    if (new_slots > ctx->slot_max_count) {
+        new_slots = ctx->slot_max_count;
+    }
+
+    if (new_slots <= old_slots) return;
+
+    loff_t offset = (loff_t)old_slots << PAGE_SHIFT;
+    loff_t len = (loff_t)(new_slots - old_slots) << PAGE_SHIFT;
+
+    int ret = vfs_fallocate(file, 0, offset, len);
+    if (ret) return;
+
+    down_write(&ctx->map_rwsem);
+    atomic_long_set(&ctx->total_slots, new_slots);
+    up_write(&ctx->map_rwsem);
+
+    pr_info("dynaswap [EXPAND]: Capacity increased to %lu slots\n", new_slots);
+}
+
+#pragma endregion
 
 #pragma region Workqueue Functions
 
-
 void dynaswap_extend(struct work_struct *work) {
-
+    struct dynamap_ctx *ctx = container_of(work, struct dynamap_ctx, extend_work);
+    dynaswap_expand_file(ctx);
 }
 
 void dynaswap_truncate(struct work_struct *work) {
@@ -51,90 +93,132 @@ void dynaswap_truncate(struct work_struct *work) {
 #pragma region Main Functions
 
 void dynaswap_read(struct dynamap_ctx *ctx, sector_t sector, struct page *page) {
-    // unsigned long page_index = sector >> (PAGE_SHIFT - 9);
+    ulong page_index = sector >> (PAGE_SHIFT - 9);
+    ulong dir = page_index / ENTRIES_PER_PAGE;
+    ulong leaf = page_index % ENTRIES_PER_PAGE;
 
-    // down_read(&ctx->mapping_rwsem);
+    down_read(&ctx->map_rwsem);
 
-    // void *entry = xa_load(&ctx->xa_virt_to_phys, page_index);
-    // if (!entry) {
-    //     // If it isn't a value, just memset the whole thing to 0
-    //     // pr_debug("dynaswap: tried to read from an empty page index (idx: %lu)\n", page_index);
-    //     void *vaddr = kmap_local_page(page);
-    //     memset(vaddr, 0, PAGE_SIZE);
-    //     kunmap_local(vaddr);
-    //     goto out;
-    // }
+    ulong p_slot = ctx->virt_to_phys_map[dir][leaf];
 
-    // struct slot_entry *slot = (struct slot_entry *)entry;
-    // loff_t bd_offset = (loff_t)(slot->index - 1) * PAGE_SIZE;
+    up_read(&ctx->map_rwsem);
 
-    // pr_debug("dynamap [READ]: HIT idx %lu -> p_slot %lu (offset %lld)\n", 
-    //          page_index, slot->index, bd_offset);
+    if (p_slot == ~0UL) {
+        clear_highpage(page);
+        return;
+    }
 
-    // void *vaddr = kmap_local_page(page);
-    // kernel_read(ctx->backing_file, vaddr, PAGE_SIZE, &bd_offset);
-    // kunmap_local(vaddr);
+    loff_t block_offset = (loff_t)p_slot << PAGE_SHIFT;
+    void *vaddr = kmap_local_page(page);
 
-    // out:
-    //     up_read(&ctx->mapping_rwsem);
+    ssize_t ret = kernel_read(ctx->backing_file, vaddr, PAGE_SIZE, &block_offset);
+    if (unlikely(ret != PAGE_SIZE)) {
+        // If read fails, zero the page so we don't return random junk
+        memset(vaddr, 0, PAGE_SIZE);
+        pr_err("dynaswap [READ]: Failed to read slot (slot=%lu, err=%ld)\n", p_slot, (long)ret);
+    }
+
+    kunmap_local(vaddr);
 }
 
 void dynaswap_write(struct dynamap_ctx *ctx, sector_t sector, struct page *page) {
-    // unsigned long page_index = sector >> (PAGE_SHIFT - 9);
-    // unsigned int flags = memalloc_noio_save();
-    // down_read(&ctx->mapping_rwsem);
+    ulong page_index = sector >> (PAGE_SHIFT - 9);
 
-    // unsigned long p_slot = dynaswap_acquire_slot(ctx, page_index);
-    // if (!p_slot) {
-    //     goto out;
-    // }
+    ulong dir = page_index / ENTRIES_PER_PAGE;
+    ulong leaf = page_index % ENTRIES_PER_PAGE;
 
-    // loff_t bd_offset = (loff_t)(p_slot - 1) * PAGE_SIZE;
+    ulong p_slot;
 
-    // pr_debug("dynamap [WRITE]: Mapping idx %lu -> p_slot %lu (offset %lld)\n", 
-    //          page_index, p_slot, bd_offset);
+    if (dynaswap_should_extend(ctx)) {
+        queue_work(ctx->wq, &ctx->extend_work);
+    }
 
-    // void *page_addr = kmap_local_page(page);
-    // kernel_write(ctx->backing_file, page_addr, PAGE_SIZE, &bd_offset);
-    // kunmap_local(page_addr);
+    // Check if the sector has been mapped before
+    down_read(&ctx->map_rwsem);
 
-    // out:
-    //     up_read(&ctx->mapping_rwsem);
-    //     memalloc_noio_restore(flags);
+    // If it has been mapped, reuse the p_slot
+    if (ctx->virt_to_phys_map[dir][leaf] != ~0UL) {
+        p_slot = ctx->virt_to_phys_map[dir][leaf];
+        up_read(&ctx->map_rwsem);
+        goto disk_write;
+    }
+
+    // If the sector has never been mapped before, we make a new slot
+    up_read(&ctx->map_rwsem);
+    down_write(&ctx->map_rwsem);
+
+    p_slot = ctx->virt_to_phys_map[dir][leaf];
+    if (p_slot != ~0UL) {
+        up_write(&ctx->map_rwsem);
+        goto disk_write;
+    }
+
+    // Find the next available slot
+    ulong max_slots = atomic_long_read(&ctx->total_slots);
+    p_slot = find_next_zero_bit(ctx->slot_bitmap, max_slots, ctx->slot_hint);
+    if (p_slot >= max_slots) {
+        p_slot = find_next_zero_bit(ctx->slot_bitmap, max_slots, 0);
+    }
+
+    if (p_slot >= max_slots) {
+        pr_err("dynaswap [WRITE]: Out of slots. (max=%lu, used=%lu)\n", max_slots, atomic_long_read(&ctx->active_slots));
+        up_write(&ctx->map_rwsem);
+        return;
+    }
+
+    // Update the slot to be in use
+    set_bit(p_slot, ctx->slot_bitmap);
+    ctx->slot_hint = (p_slot + 1) % max_slots;
+    ctx->virt_to_phys_map[dir][leaf] = p_slot;
+    atomic_long_inc(&ctx->active_slots);
+
+    up_write(&ctx->map_rwsem);
+
+    // Use the slot to write to the backing file
+    disk_write:
+    loff_t block_offset = (loff_t)p_slot << PAGE_SHIFT;
+    void *page_addr = kmap_local_page(page);
+    kernel_write(ctx->backing_file, page_addr, PAGE_SIZE, &block_offset);
+    kunmap_local(page_addr);
 }
 
 void dynaswap_discard(struct dynamap_ctx *ctx, sector_t sector_start, sector_t nr_sectors) {
-    // unsigned long page_start = sector_start >> (PAGE_SHIFT - 9);
-    // unsigned long page_end = (sector_start + nr_sectors) >> (PAGE_SHIFT - 9);
+    ulong start_index = sector_start >> (PAGE_SHIFT - 9);
+    ulong num_pages = DIV_ROUND_UP(nr_sectors, PAGE_SIZE >> 9);
+    ulong end_index = start_index + num_pages;
+    ulong i = start_index;
 
-    // if (page_start >= page_end) {
-    //     pr_debug("dynamap [DISCARD]: range too small (sect: %llu, nr: %llu)\n", 
-    //              (unsigned long long)sector_start, (unsigned long long)nr_sectors);
-    //     return;
-    // }
+    pr_info("dynaswap [DISCARD]: Performing Discard. (start=%lu, end=%lu)\n", start_index, end_index);
 
-    // pr_debug("dynamap [DISCARD]: requested pages %lu to %lu\n", page_start, page_end);
+    while (i < end_index) {
+        // Process in batches of 512 (one full leaf page)
+        ulong batch_end = min(i + 512, end_index);
 
-    // void *entry = NULL;
-    // unsigned long index = page_start;
+        down_write(&ctx->map_rwsem);
+        for (; i < batch_end; i++) {
+            ulong dir = i / ENTRIES_PER_PAGE;
+            ulong leaf = i % ENTRIES_PER_PAGE;
+            
+            // Safety check for directory allocation
+            if (!ctx->virt_to_phys_map[dir]) continue;
 
-    // down_write(&ctx->mapping_rwsem);
+            ulong p_slot = ctx->virt_to_phys_map[dir][leaf];
+            if (p_slot == ~0UL) continue;
 
-    // xa_for_each_range(&ctx->xa_virt_to_phys, index, entry, page_start, page_end) {
-    //     struct slot_entry *slot = (struct slot_entry *)entry;
+            // Logical Clear
+            ctx->virt_to_phys_map[dir][leaf] = ~0UL;
+            clear_bit(p_slot, ctx->slot_bitmap);
+            atomic_long_dec(&ctx->active_slots);
 
-    //     if (!slot) continue;
-
-    //     pr_debug("dynamap [DISCARD] erasing page %lu (p_slot %lu)\n", index, slot->index);
-
-    //     xa_erase(&ctx->xa_virt_to_phys, index);
-    //     slot->virt_page = 0;
-
-    //     llist_add(&slot->node, &ctx->free_slots);
-    //     atomic_long_dec(&ctx->active_slots);
-    // }
-
-    // up_write(&ctx->mapping_rwsem);
+            // Physical Clear
+            // loff_t offset = (loff_t)p_slot << PAGE_SHIFT;
+            // vfs_fallocate(ctx->backing_file, FALLOC_FL_PUNCH_HOLE | FALLOC_FL_KEEP_SIZE, offset, PAGE_SIZE);
+        }
+        up_write(&ctx->map_rwsem);
+        
+        // Yield to let other tasks run
+        cond_resched();
+    }
 }
 
 #pragma endregion
@@ -161,11 +245,14 @@ int dynamap_init(struct dynamap_ctx *ctx, const char *path, size_t total_capacit
         goto fail;
 
     for (unsigned long i = 0; i < nr_dirs; i++) {
-        ctx->virt_to_phys_map[i] = (unsigned long *)get_zeroed_page(GFP_KERNEL);
-        ctx->phys_to_virt_map[i] = (unsigned long *)get_zeroed_page(GFP_KERNEL);
+        ctx->virt_to_phys_map[i] = (unsigned long *)__get_free_page(GFP_KERNEL);
+        ctx->phys_to_virt_map[i] = (unsigned long *)__get_free_page(GFP_KERNEL);
 
         if (!ctx->virt_to_phys_map[i] || !ctx->phys_to_virt_map[i])
             goto fail;
+        
+        memset(ctx->virt_to_phys_map[i], 0xFF, PAGE_SIZE);
+        memset(ctx->phys_to_virt_map[i], 0xFF, PAGE_SIZE);
     }
 
     // Slot Bitmapping
@@ -174,7 +261,10 @@ int dynamap_init(struct dynamap_ctx *ctx, const char *path, size_t total_capacit
         goto fail;
 
     ctx->slot_hint = 0;
-    atomic_long_set(&ctx->total_slots, total_pages);
+    ctx->slot_max_count = total_pages;
+
+    // Actual Disk Mapped Slots
+    atomic_long_set(&ctx->total_slots, 0);
     atomic_long_set(&ctx->active_slots, 0);
 
     // WorkQueues
@@ -187,6 +277,9 @@ int dynamap_init(struct dynamap_ctx *ctx, const char *path, size_t total_capacit
 
     // Semaphores
     init_rwsem(&ctx->map_rwsem);
+
+    // File Initialization
+    queue_work(ctx->wq, &ctx->extend_work);
 
     return 0;
 

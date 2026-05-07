@@ -1,13 +1,7 @@
 #ifndef DYNAMAP_H
 #define DYNAMAP_H
 
-#include <linux/fs.h>
-#include <linux/xarray.h>
-#include <linux/llist.h>
-#include <linux/types.h>
-
-#define DYNASWAP_EXTENDING 0
-
+#define ENTRIES_PER_PAGE (PAGE_SIZE / sizeof(unsigned long))
 #define BLK_SECTOR_SIZE  512
 
 extern struct dynamap_ctx {
@@ -19,6 +13,7 @@ extern struct dynamap_ctx {
 
     unsigned long *slot_bitmap;
     unsigned long slot_hint;
+    unsigned long slot_max_count;
 
     atomic_long_t total_slots;
     atomic_long_t active_slots;

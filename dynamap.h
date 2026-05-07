@@ -2,6 +2,8 @@
 #define DYNAMAP_H
 
 #define ENTRIES_PER_PAGE (PAGE_SIZE / sizeof(unsigned long))
+#define SECTOR_INDEX_SHIFT (PAGE_SHIFT - SECTOR_SHIFT)
+
 #define BLK_SECTOR_SIZE  512
 
 extern struct dynamap_ctx {

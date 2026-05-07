@@ -1,4 +1,5 @@
 #define DEBUG
+#undef DEBUG
 
 #include <linux/fs.h>
 #include <linux/falloc.h>
@@ -72,7 +73,7 @@ static void dynaswap_expand_file(struct dynamap_ctx *ctx) {
     atomic_long_set(&ctx->total_slots, new_slots);
     up_write(&ctx->map_rwsem);
 
-    pr_info("dynaswap [EXPAND]: Capacity increased to %lu slots\n", new_slots);
+    pr_debug("dynaswap [EXPAND]: Capacity increased to %lu slots\n", new_slots);
 }
 
 #pragma endregion
@@ -93,7 +94,7 @@ void dynaswap_truncate(struct work_struct *work) {
 #pragma region Main Functions
 
 void dynaswap_read(struct dynamap_ctx *ctx, sector_t sector, struct page *page) {
-    ulong page_index = sector >> (PAGE_SHIFT - 9);
+    ulong page_index = sector >> SECTOR_INDEX_SHIFT;
     ulong dir = page_index / ENTRIES_PER_PAGE;
     ulong leaf = page_index % ENTRIES_PER_PAGE;
 
@@ -122,7 +123,7 @@ void dynaswap_read(struct dynamap_ctx *ctx, sector_t sector, struct page *page) 
 }
 
 void dynaswap_write(struct dynamap_ctx *ctx, sector_t sector, struct page *page) {
-    ulong page_index = sector >> (PAGE_SHIFT - 9);
+    ulong page_index = sector >> SECTOR_INDEX_SHIFT;
 
     ulong dir = page_index / ENTRIES_PER_PAGE;
     ulong leaf = page_index % ENTRIES_PER_PAGE;
@@ -183,12 +184,11 @@ void dynaswap_write(struct dynamap_ctx *ctx, sector_t sector, struct page *page)
 }
 
 void dynaswap_discard(struct dynamap_ctx *ctx, sector_t sector_start, sector_t nr_sectors) {
-    ulong start_index = sector_start >> (PAGE_SHIFT - 9);
-    ulong num_pages = DIV_ROUND_UP(nr_sectors, PAGE_SIZE >> 9);
-    ulong end_index = start_index + num_pages;
+    ulong start_index = sector_start >> SECTOR_INDEX_SHIFT;
+    ulong end_index = (sector_start + nr_sectors) >> SECTOR_INDEX_SHIFT;
     ulong i = start_index;
 
-    pr_info("dynaswap [DISCARD]: Performing Discard. (start=%lu, end=%lu)\n", start_index, end_index);
+    pr_debug("dynaswap [DISCARD]: Performing Discard. (start=%lu, end=%lu)\n", start_index, end_index);
 
     while (i < end_index) {
         // Process in batches of 512 (one full leaf page)
@@ -210,9 +210,12 @@ void dynaswap_discard(struct dynamap_ctx *ctx, sector_t sector_start, sector_t n
             clear_bit(p_slot, ctx->slot_bitmap);
             atomic_long_dec(&ctx->active_slots);
 
-            // Physical Clear
-            // loff_t offset = (loff_t)p_slot << PAGE_SHIFT;
-            // vfs_fallocate(ctx->backing_file, FALLOC_FL_PUNCH_HOLE | FALLOC_FL_KEEP_SIZE, offset, PAGE_SIZE);
+            // TODO Physical Clear, move this into a workqueue or something 
+            loff_t offset = (loff_t)p_slot << PAGE_SHIFT;
+            int ret = vfs_fallocate(ctx->backing_file, FALLOC_FL_PUNCH_HOLE | FALLOC_FL_KEEP_SIZE, offset, PAGE_SIZE);
+            if (ret) {
+                pr_warn("dynaswap [DISCARD]: fallocate failed at p_slot %lu with error %d\n", p_slot, ret);
+            }
         }
         up_write(&ctx->map_rwsem);
         

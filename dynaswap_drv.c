@@ -195,7 +195,7 @@ static int dynaswap_init_mapping(void) {
     }
     xa_init(&dynaswap_mapping);
 
-    size_t total_capacity = (size_t)blk_capacity_gb * 1024 * 1024 * 1024;
+    size_t total_capacity = (size_t)blk_capacity_gb * 1024ULL * 1024ULL * 1024ULL;
     int status = dynamap_init(&dynamap, dynamap_location, total_capacity);
     pr_debug("dynaswap: mapping initialized\n");
     return status;

@@ -282,12 +282,11 @@ void dynamap_cleanup(struct dynamap_ctx *ctx) {
     if (!ctx) return;
 
     // WorkQueues
-    cancel_work_sync(&ctx->extend_work);
-    cancel_work_sync(&ctx->truncate_work);
+    if (ctx->extend_work.func) {
+        cancel_work_sync(&ctx->extend_work);
+    }
 
     if (ctx->wq) {
-        // Should we flush here?
-        // flush_workqueue(ctx->wq);
         destroy_workqueue(ctx->wq);
         ctx->wq = NULL;
     }

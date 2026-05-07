@@ -6,7 +6,7 @@
 
 #define BLK_SECTOR_SIZE  512
 
-extern struct dynamap_ctx {
+struct dynamap_ctx {
     struct file *backing_file;
 
     unsigned long **virt_to_phys_map;
@@ -22,10 +22,9 @@ extern struct dynamap_ctx {
 
     struct workqueue_struct *wq;
     struct work_struct extend_work;
-    struct work_struct truncate_work;
 
     struct rw_semaphore map_rwsem;
-} dynamap;
+};
 
 // Workqueue Operations
 void dynaswap_extend(struct work_struct *work);

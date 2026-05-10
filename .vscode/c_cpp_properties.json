@@ -1,0 +1,27 @@
+{
+    "configurations": [
+        {
+            "name": "Linux",
+            "includePath": [
+                "${workspaceFolder}/**",
+                "/usr/src/linux-cachyos/include",
+                "/usr/src/linux-cachyos/arch/x86/include",
+                "/usr/src/linux-cachyos/include/uapi",
+                "/usr/src/linux-cachyos/arch/x86/include/generated",
+                "/usr/src/linux-cachyos/arch/x86/include/uapi",
+                "/usr/src/linux-cachyos/arch/x86/include/generated/uapi"
+            ],
+            "defines": [
+                "__KERNEL__",
+                "MODULE",
+                "KBUILD_MODNAME=\"dynaswap_drv\"",
+                "__GNUC__",
+                "KBUILD_STR(s)=#s"
+            ],
+            "compilerPath": "/usr/bin/clang",
+            "intelliSenseMode": "linux-clang-x64",
+            "cStandard": "c17"
+        }
+    ],
+    "version": 4
+}

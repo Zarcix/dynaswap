@@ -50,7 +50,6 @@ build/
 modules.order
 Module.symvers
 Mkfile.old
-dkms.conf
 
 # Repo Folders
 dist/

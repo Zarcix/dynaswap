@@ -1,27 +1,12 @@
 # DynaSwap
 
-Welcome to dynaswap! Dynaswap allows you to set up dynamic swap on Linux distributions.
+DynaSwap provides dynamic swap on Linux. It comes in two flavors:
 
-## Building
+- **[src/service/](src/service/)** — a userspace daemon that watches PSI
+  memory pressure and adds or removes real swap files on the fly.
+- **[src/driver/](src/driver/)** — a kernel block driver that exposes
+  `/dev/dynaswap`, a virtual block device backed by a sparse file that grows
+  on demand.
 
-0. Dependencies
-  - libconfig
-  - procps
-1. Run `make`
-2. That's it
+See the README in each directory for build and usage instructions.
 
-## Running
-
-There are currently two ways to run this program
-1. Command Line
-  - Make sure that you have built the application
-  - `sudo ./build/<arch>/dynaswap -c misc/dynaswap.conf`
-  - Sudo is required since this directly creates swap files and swaps the files on.
-2. Systemd Service
-  - The systemd service file is declared in `misc/dynaswap.service`
-  - Installation of the service is required.
-  - The file assumes that dynaswap's config file lies in `/etc/dynaswap.conf`
-
-## Configuratino
-
-Dynaswap uses a configuration file to start up the program. A default configration file can be found in `misc/dynaswap.conf`

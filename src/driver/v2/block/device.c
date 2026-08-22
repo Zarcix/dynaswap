@@ -1,3 +1,5 @@
+#include "../config.h"
+
 #include <linux/blkdev.h>
 #include <linux/blk-mq.h>
 
@@ -19,7 +21,6 @@ static const struct block_device_operations FILE_OPS = {
 
 static bool register_device(void) {
     int major = register_blkdev(BLOCK_MAJOR, BLKDEV_NAME);
-
     if (major < 0) {
         pr_err("dynaswap::block::device.c -- register_blkdev failed. (major = %d)\n", major);
         return false;
@@ -37,6 +38,7 @@ void setup_device(void) {
 
 void teardown_device(void) {
     if (BLOCK_MAJOR > 0) {
+        pr_debug("dynaswap::block::device.c -- block device found, unregistering device. (major = %d)\n", BLOCK_MAJOR);
         unregister_blkdev(BLOCK_MAJOR, BLKDEV_NAME);
         BLOCK_MAJOR = 0;
     }

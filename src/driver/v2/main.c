@@ -1,3 +1,5 @@
+#include "config.h"
+
 #include <linux/module.h>
 
 #include "block/device.h"

@@ -1,4 +1,4 @@
-#include "config.h"
+#include "common.h"
 
 #include <linux/blkdev.h>
 #include <linux/blk-mq.h>
@@ -30,18 +30,18 @@ static int BLOCK_MAJOR = 0;
 static bool register_device(void) {
     int major = register_blkdev(BLOCK_MAJOR, BLKDEV_NAME);
     if (major < 0) {
-        pr_err("dynaswap::block::device.c -- register_blkdev failed. (err = %d,%pE)\n", major, ERR_PTR(major));
+        log_err("register_blkdev failed. (err = %d,%pE)", major, ERR_PTR(major));
         return false;
     }
 
     BLOCK_MAJOR = major;
-    pr_debug("dynaswap::block::device.c -- block device registered. (major = %d)\n", BLOCK_MAJOR);
+    log_debug("block device registered. (major = %d)", BLOCK_MAJOR);
     return true;
 }
 
 static void unregister_device(void) {
     if (BLOCK_MAJOR > 0) {
-        pr_debug("dynaswap::block::device.c -- block device found, unregistering device. (major = %d)\n", BLOCK_MAJOR);
+        log_debug("block device found, unregistering device. (major = %d)", BLOCK_MAJOR);
         unregister_blkdev(BLOCK_MAJOR, BLKDEV_NAME);
         BLOCK_MAJOR = 0;
     }
@@ -64,23 +64,23 @@ static struct blk_mq_tag_set TAG_SET = {
 static bool alloc_tagset(void) {
     int err = blk_mq_alloc_tag_set(&TAG_SET);
     if (err) {
-        pr_err("dynaswap::block::device.c -- blk_mq_alloc_tag_set failed. (err: %d,%pE)\n", err, ERR_PTR(err));
+        log_err("blk_mq_alloc_tag_set failed. (err: %d,%pE)", err, ERR_PTR(err));
         return false;
     }
 
-    pr_debug("dynaswap::block::device.c -- tag set allocated\n");
+    log_debug("tag set allocated");
     return true;
 }
 
 static void free_tagset(void) {
     if (!TAG_SET.tags) {
-        pr_err("dynaswap::block::device.c -- tag_set already freed or not initialized\n");
+        log_err("tag_set already freed or not initialized");
         return;
     }
 
     blk_mq_free_tag_set(&TAG_SET);
     memset(&TAG_SET, 0, sizeof(TAG_SET));
-    pr_debug("dynaswap::block::device.c -- freed tag set\n");
+    log_debug("freed tag set");
 }
 
 /** Disk Creation
@@ -108,12 +108,12 @@ static bool create_disk(void) {
     // Allocate Disk First
     DYNASWAP_DISK = blk_mq_alloc_disk(&TAG_SET, &QUEUE_LIMITS, NULL);
     if (IS_ERR(DYNASWAP_DISK)) {
-        pr_err("dynaswap::block::device.c -- blk_mq_alloc_disk failed: %pE\n", DYNASWAP_DISK);
+        log_err("blk_mq_alloc_disk failed: %pE", DYNASWAP_DISK);
         DYNASWAP_DISK = NULL;
         return false;
     }
 
-    pr_debug("dynaswap::block::device.c -- gendisk allocated successfully\n");
+    log_debug("gendisk allocated successfully");
 
     // Set up Disk Information
     snprintf(DYNASWAP_DISK->disk_name, 32, BLKDEV_NAME);
@@ -122,7 +122,7 @@ static bool create_disk(void) {
     DYNASWAP_DISK->minors = 1;
     DYNASWAP_DISK->fops = &FILE_OPS;
 
-    pr_debug("dynaswap::block::device.c -- disk information updated\n");
+    log_debug("disk information updated");
 
     /** Configure Discard
      * This is commented out since the queue limits *should* cover this.
@@ -132,31 +132,31 @@ static bool create_disk(void) {
         DYNASWAP_DISK->queue->limits.max_hw_discard_sectors = UINT_MAX;
         DYNASWAP_DISK->queue->limits.discard_granularity = PAGE_SIZE;
 
-        pr_debug("dynaswap::block::device.c -- discard configured\n");
+        log_debug("discard configured");
 
     **/
 
     // Set Capacity
     set_capacity(DYNASWAP_DISK, BLOCK_CAPACITY);
 
-    pr_debug("dynaswap::block::device.c -- block capacity updated. (capacity = %d, sectors = %llu)\n", BLOCK_CAPACITY_GB, BLOCK_CAPACITY);
+    log_debug("block capacity updated. (capacity = %d, sectors = %llu)", BLOCK_CAPACITY_GB, BLOCK_CAPACITY);
 
     int err = add_disk(DYNASWAP_DISK);
     if (err) {
-        pr_err("dynaswap::block::device.c -- add_disk failed: (err = %pe, code = %d)\n", ERR_PTR(err), err);
+        log_err("add_disk failed: (err = %pe, code = %d)", ERR_PTR(err), err);
         put_disk(DYNASWAP_DISK);
         DYNASWAP_DISK = NULL;
         return false;
     }
 
-    pr_debug("dynaswap::block::device.c -- disk added, creation finished\n");
+    log_debug("disk added, creation finished");
 
     return true;
 }
 
 static void remove_disk(void) {
     if (!DYNASWAP_DISK) {
-        pr_err("dynaswap::block::device.c -- dynaswap disk already NULL, skipping\n");
+        log_err("dynaswap disk already NULL, skipping");
         return;
     }
 
@@ -165,7 +165,7 @@ static void remove_disk(void) {
 
     DYNASWAP_DISK = NULL;
 
-    pr_debug("dynaswap::block::device.c -- deleted dynaswap disk\n");
+    log_debug("deleted dynaswap disk");
 }
 
 /** Public Functions

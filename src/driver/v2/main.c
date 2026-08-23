@@ -5,12 +5,12 @@
 #include "block/device.h"
 
 static int __init init(void) {
-    setup_device();
+    setup_disk();
     return 0;
 }
 
 static void __exit exit(void) {
-    teardown_device();
+    teardown_disk();
     return;
 }
 

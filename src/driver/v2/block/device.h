@@ -3,7 +3,7 @@
 
 #define BLKDEV_NAME "dynaswap"
 
-void setup_device(void);
-void teardown_device(void);
+void setup_disk(void);
+void teardown_disk(void);
 
 #endif

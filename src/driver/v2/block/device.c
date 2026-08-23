@@ -5,8 +5,6 @@
 
 #include "device.h"
 
-static int BLOCK_MAJOR = 0;
-
 static const struct block_device_operations FILE_OPS = {
     .owner = THIS_MODULE,
 };
@@ -62,6 +60,8 @@ static void free_tagset(void) {
  * block device creation.
  */
 
+static int BLOCK_MAJOR = 0;
+
 static bool register_device(void) {
     int major = register_blkdev(BLOCK_MAJOR, BLKDEV_NAME);
     if (major < 0) {
@@ -82,12 +82,12 @@ static void unregister_device(void) {
     }
 }
 
-void setup_device(void) {
+void setup_disk(void) {
     register_device();
     alloc_tagset();
 }
 
-void teardown_device(void) {
+void teardown_disk(void) {
     free_tagset();
     unregister_device();
 }

@@ -226,10 +226,10 @@ static int dynaswap_init_tag_set(void) {
 
 static int dynaswap_setup_disk(void) {
     struct queue_limits lim = {
-        .logical_block_size = BLK_SECTOR_SIZE,
-        .physical_block_size = BLK_SECTOR_SIZE,
+        .logical_block_size = SECTOR_SIZE,
+        .physical_block_size = SECTOR_SIZE,
         .max_discard_sectors = UINT_MAX,
-        .discard_granularity = BLK_SECTOR_SIZE,
+        .discard_granularity = SECTOR_SIZE,
     };
 
     sector_t capacity;

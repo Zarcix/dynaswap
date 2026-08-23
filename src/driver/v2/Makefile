@@ -1,4 +1,4 @@
-export LLVM = 1
+# export LLVM = 1
 
 obj-m := dynaswap.o
 dynaswap-y := main.o block/device.o	

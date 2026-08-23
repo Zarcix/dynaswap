@@ -1,9 +1,9 @@
-#include "../config.h"
+#include "config.h"
 
 #include <linux/blkdev.h>
 #include <linux/blk-mq.h>
 
-#include "device.h"
+#include "block/device.h"
 
 static const struct block_device_operations FILE_OPS = {
     .owner = THIS_MODULE,

@@ -3,6 +3,8 @@ export LLVM = 1
 obj-m := dynaswap.o
 dynaswap-y := main.o block/device.o	
 
+ccflags-y := -I$(src)/
+
 all:
 	$(MAKE) -C /lib/modules/$(shell uname -r)/build M=$(shell pwd) CONFIG_DEBUG_INFO_BTF_MODULES= modules
 

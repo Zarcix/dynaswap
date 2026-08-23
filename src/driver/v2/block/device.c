@@ -82,6 +82,11 @@ static void unregister_device(void) {
     }
 }
 
+/** Public Functions
+ * 
+ * Actual functions to be called in other locations. Pretty self explanatory.
+ */
+
 void setup_disk(void) {
     register_device();
     alloc_tagset();

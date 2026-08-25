@@ -5,7 +5,7 @@
 
 #define BLOCK_CAPACITY (BLOCK_CAPACITY_GB * 1024ULL * 1024ULL * 2ULL)
 
-void setup_disk(void);
+bool setup_disk(void);
 void teardown_disk(void);
 
 #endif

@@ -2,15 +2,29 @@
 
 #include <linux/module.h>
 
-#include "block/device.h"
+#include "context.h"
+#include "device.h"
 
 static int __init init_driver(void) {
-    setup_disk();
+    int status;
+    
+    status = setup_context();
+    if (status) {
+        return status;
+    }
+
+    status = setup_disk();
+    if (status < 0) {
+        teardown_context();
+        return status;
+    }
+
     return 0;
 }
 
 static void __exit exit_driver(void) {
     teardown_disk();
+    teardown_context();
     return;
 }
 

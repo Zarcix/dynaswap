@@ -3,7 +3,7 @@
 #include <linux/blkdev.h>
 #include <linux/blk-mq.h>
 
-#include "block/device.h"
+#include "device.h"
 
 static blk_status_t handle_rq(struct blk_mq_hw_ctx *hw_ctx, const struct blk_mq_queue_data *queue_data) {
     struct request *req = queue_data->rq;
@@ -144,7 +144,6 @@ static bool create_disk(void) {
     int err = add_disk(DYNASWAP_DISK);
     if (err) {
         log_err("add_disk failed: (err = %pe, code = %d)", ERR_PTR(err), err);
-        put_disk(DYNASWAP_DISK);
         DYNASWAP_DISK = NULL;
         return false;
     }
@@ -173,14 +172,38 @@ static void remove_disk(void) {
  * Actual functions to be called in other locations. Pretty self explanatory.
  */
 
-void setup_disk(void) {
-    register_device();
-    alloc_tagset();
-    create_disk();
+bool setup_disk(void) {
+    bool successful;
+    
+    successful = register_device();
+    if (!successful) {
+        return false;
+    }
+
+    successful = alloc_tagset();
+    if (!successful) {
+        unregister_device();
+        return false;
+    }
+
+    successful = create_disk();
+    if (!successful) {
+        free_tagset();
+        unregister_device();
+        return false;
+    }
+
+    return true;
 }
 
 void teardown_disk(void) {
+
+    log_debug("removing disk");
     remove_disk();
+
+    log_debug("freeing tagset");
     free_tagset();
+
+    log_debug("unregistering device");
     unregister_device();
 }

@@ -1,7 +1,7 @@
 # export LLVM = 1
 
 obj-m := dynaswap.o
-dynaswap-y := main.o block/device.o	
+dynaswap-y := main.o device.o context.o fs/storage.o
 
 ccflags-y := -I$(src)/
 

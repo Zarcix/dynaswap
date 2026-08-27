@@ -13,10 +13,10 @@ struct storage_context {
     struct rw_semaphore work_sem;
 };
 
-void extend_storage(void);
+int extend_storage(unsigned long current_slots, unsigned long added_slots);
 void truncate_storage(void);
-void write_storage(void);
-void read_storage(void);
+int read_storage(unsigned long slot, struct page *dest);
+int write_storage(unsigned long slot, struct page *page);
 
 int setup_storage(void);
 void teardown_storage(void);

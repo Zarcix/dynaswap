@@ -56,3 +56,5 @@ dist/
 
 # VM Folders
 vm/fs.qcow2
+
+compile_commands.json

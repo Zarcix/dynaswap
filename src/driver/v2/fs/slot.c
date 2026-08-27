@@ -13,8 +13,8 @@ int setup_slot_manager(void) {
     log_debug("setting up slot manager");
 
     // we prealloc the slot bitmap since it's a tiny allocation, no other real reason around it lol
-    unsigned int max_slots = (unsigned int)(BLOCK_CAPACITY >> SECTORS_PER_PAGE_SHIFT);
-    log_debug("trying to allocate slot bitmap (size = %u)", max_slots);
+    unsigned long max_slots = (unsigned long)(BLOCK_CAPACITY >> SECTORS_PER_PAGE_SHIFT);
+    log_debug("trying to allocate slot bitmap (size = %lu)", max_slots);
     SLOT_MANAGER.slot_bitmap = kvmalloc_array(BITS_TO_LONGS(max_slots), sizeof(unsigned long), GFP_KERNEL);
 
     if (!SLOT_MANAGER.slot_bitmap) {
@@ -38,5 +38,5 @@ void teardown_slot_manager(void){
     xa_destroy(&SLOT_MANAGER.slot_to_page);
     xa_destroy(&SLOT_MANAGER.page_to_slot);
 
-    kfree(SLOT_MANAGER.slot_bitmap);
+    kvfree(SLOT_MANAGER.slot_bitmap);
 }

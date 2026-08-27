@@ -100,8 +100,8 @@ static struct queue_limits QUEUE_LIMITS = {
     .discard_granularity = SECTOR_SIZE,
 };
 
-uint BLOCK_CAPACITY_GB = 128;
-module_param_named(block_capacity, BLOCK_CAPACITY_GB, uint, S_IRUSR | S_IRGRP | S_IROTH);
+ullong BLOCK_CAPACITY_GB = 128;
+module_param_named(block_capacity, BLOCK_CAPACITY_GB, ullong, S_IRUSR | S_IRGRP | S_IROTH);
 MODULE_PARM_DESC(block_capacity, "Capacity of the block device in GB (default: 128G)");
 
 static struct gendisk *DYNASWAP_DISK = NULL;
@@ -141,7 +141,7 @@ static bool create_disk(void) {
     // Set Capacity
     set_capacity(DYNASWAP_DISK, BLOCK_CAPACITY);
 
-    log_debug("block capacity updated. (capacity = %d, sectors = %llu)", BLOCK_CAPACITY_GB, BLOCK_CAPACITY);
+    log_debug("block capacity updated. (capacity = %llu, sectors = %llu)", BLOCK_CAPACITY_GB, BLOCK_CAPACITY);
 
     int err = add_disk(DYNASWAP_DISK);
     if (err) {

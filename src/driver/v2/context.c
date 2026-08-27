@@ -43,6 +43,7 @@ static void teardown_self_context(void) {
 }
 
 void teardown_context(void) {
+    teardown_slot_manager();
     teardown_storage();
     teardown_self_context();
 }

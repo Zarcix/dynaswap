@@ -100,7 +100,7 @@ static struct queue_limits QUEUE_LIMITS = {
     .discard_granularity = SECTOR_SIZE,
 };
 
-static uint BLOCK_CAPACITY_GB = 128;
+uint BLOCK_CAPACITY_GB = 128;
 module_param_named(block_capacity, BLOCK_CAPACITY_GB, uint, S_IRUSR | S_IRGRP | S_IROTH);
 MODULE_PARM_DESC(block_capacity, "Capacity of the block device in GB (default: 128G)");
 

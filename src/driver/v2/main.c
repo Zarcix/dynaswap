@@ -1,5 +1,3 @@
-#include "common.h"
-
 #include <linux/module.h>
 
 #include "context.h"
@@ -7,7 +5,7 @@
 
 static int __init init_driver(void) {
     int status;
-    
+
     status = setup_context();
     if (status) {
         return status;

@@ -11,7 +11,7 @@ static struct storage_context STORAGE_CONTEXT = {0};
  * Module Arguments
  */
 
-static char *storage_location = NULL;
+char *storage_location = NULL;
 module_param_named(path, storage_location, charp, S_IRUSR | S_IRGRP | S_IROTH);
 MODULE_PARM_DESC(path, "Path to the backing file");
 
@@ -31,7 +31,7 @@ void write_storage(void) {}
  * Teardown
  */
 
-void teardown_storage() {
+void teardown_storage(void) {
     if (STORAGE_CONTEXT.backing_file && !IS_ERR(STORAGE_CONTEXT.backing_file)) {
         struct inode *inode = file_inode(STORAGE_CONTEXT.backing_file);
 

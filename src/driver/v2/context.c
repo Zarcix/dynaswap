@@ -2,6 +2,7 @@
 
 #include "context.h"
 #include "fs/storage.h"
+#include "fs/slot.h"
 
 static struct context CONTEXT = {0};
 
@@ -67,13 +68,21 @@ int setup_context(void) {
 
     status = setup_self_context();
     if (status < 0) {
-        log_debug("self context initialization failed");
+        log_err("self context initialization failed");
         return status;
     }
 
     status = setup_storage();
     if (status < 0) {
-        log_debug("failed initializing storage");
+        log_err("failed initializing storage");
+        teardown_self_context();
+        return status;
+    }
+
+    status = setup_slot_manager();
+    if (status < 0) {
+        log_err("failed to setup slot manager");
+        teardown_storage();
         teardown_self_context();
         return status;
     }

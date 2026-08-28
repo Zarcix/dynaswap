@@ -50,8 +50,8 @@ unsigned long get_total_slots(void);
 /* Slot Functionality */
 
 void extend_slots(unsigned long new_slots);
-int reserve_slot(sector_t sector, unsigned long *slot);
-int find_slot(sector_t sector, unsigned long *slot);
+int reserve_slot_sector(sector_t sector, unsigned long *slot);
+int find_slot_sector(sector_t sector, unsigned long *slot);
 
 /* Init */
 

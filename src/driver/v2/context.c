@@ -50,7 +50,7 @@ int dynaswap_read(sector_t sector, struct page *page) {
     int ret;
     
     // This isn't really an error. If find_slot fails, it means it couldn't find a slot. This means that it is an empty page aka a zeroed page.
-    ret = find_slot(sector, &slot);
+    ret = find_slot_sector(sector, &slot);
     if (ret) {
         up_read(&CONTEXT.work_sem);
         clear_highpage(page);
@@ -78,7 +78,7 @@ int dynaswap_write(sector_t sector, struct page *page) {
  
     down_write(&CONTEXT.work_sem);
 
-    ret = reserve_slot(sector, &write_slot);
+    ret = reserve_slot_sector(sector, &write_slot);
     if (ret) {
         log_err("failed to get write slot for sector (sector = %llu, err = %pe)", sector, ERR_PTR(ret));
         up_write(&CONTEXT.work_sem);

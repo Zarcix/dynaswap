@@ -60,8 +60,8 @@ void extend_slots(unsigned long new_slots) {
     log_debug("extended slots (total slot count = %lu)", target_slots);
 }
 
-int reserve_slot(sector_t sector, unsigned long *slot) {
-    if (find_slot(sector, slot) == 0) {
+int reserve_slot_sector(sector_t sector, unsigned long *slot) {
+    if (find_slot_sector(sector, slot) == 0) {
         return 0;
     }
 
@@ -111,7 +111,7 @@ int reserve_slot(sector_t sector, unsigned long *slot) {
     return 0;
 }
 
-int find_slot(sector_t sector, unsigned long *slot) {
+int find_slot_sector(sector_t sector, unsigned long *slot) {
     unsigned long page = sector >> SECTORS_PER_PAGE_SHIFT;
 
     // Find slot if it exists

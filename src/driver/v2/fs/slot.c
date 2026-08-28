@@ -59,15 +59,12 @@ void extend_slots(unsigned long new_slots) {
     } while (!atomic_long_try_cmpxchg(&SLOT_MANAGER.total_slots, &old_slots, target_slots));
 }
 
-int get_write_slot(sector_t sector, unsigned long *slot) {
-    unsigned long page = sector >> SECTORS_PER_PAGE_SHIFT;
-
-    // If page has ever been allocated before, reuse allocation
-    void *potential_slot = xa_load(&SLOT_MANAGER.page_to_slot, page);
-    if (xa_is_value(potential_slot)) {
-        *slot = xa_to_value(potential_slot);
+int reserve_slot(sector_t sector, unsigned long *slot) {
+    if (find_slot(sector, slot) == 0) {
         return 0;
     }
+
+    unsigned long page = sector >> SECTORS_PER_PAGE_SHIFT;
 
     // This page has never been allocated before, need to find free slot
     unsigned long total_slots = atomic_long_read(&SLOT_MANAGER.total_slots);
@@ -98,7 +95,7 @@ int get_write_slot(sector_t sector, unsigned long *slot) {
         return ret;
     }
 
-    xa_store(&SLOT_MANAGER.slot_to_page, free_slot, xa_page, GFP_KERNEL);
+    ret = xa_err(xa_store(&SLOT_MANAGER.slot_to_page, free_slot, xa_page, GFP_KERNEL));
     if (unlikely(ret)) {
         pr_err("failed to store data to slot_to_page map (slot = %lu, page = %lu)",free_slot ,page);
         xa_erase(&SLOT_MANAGER.page_to_slot, page);
@@ -108,7 +105,23 @@ int get_write_slot(sector_t sector, unsigned long *slot) {
 
     atomic_long_inc(&SLOT_MANAGER.active_slots);
 
+    *slot = free_slot;
+
     return 0;
+}
+
+int find_slot(sector_t sector, unsigned long *slot) {
+    unsigned long page = sector >> SECTORS_PER_PAGE_SHIFT;
+
+    // Find slot if it exists
+    void *potential_slot = xa_load(&SLOT_MANAGER.page_to_slot, page);
+    if (xa_is_value(potential_slot)) {
+        *slot = xa_to_value(potential_slot);
+        return 0;
+    }
+
+    // If it doesn't exist, then we just quit
+    return -ENOENT;
 }
 
 /**

@@ -50,7 +50,27 @@ static void dynaswap_truncate(struct work_struct *work) {}
  */
 
 int dynaswap_read(sector_t sector, struct page *page) {
-    log_debug("received read operation (sector = %llu)", sector);
+    down_read(&CONTEXT.work_sem);
+
+    unsigned long slot;
+    int ret;
+    
+    // This isn't really an error. If find_slot fails, it means it couldn't find a slot. This means that it is an empty page aka a zeroed page.
+    ret = find_slot(sector, &slot);
+    if (ret) {
+        up_read(&CONTEXT.work_sem);
+        clear_highpage(page);
+        return 0;
+    }
+
+    up_read(&CONTEXT.work_sem);
+
+    ret = read_storage(slot, page);
+    if (ret) {
+        log_err("failed to get read from backing storage (slot = %lu, err = %pe)", slot, ERR_PTR(ret));
+        return ret;
+    }
+
     return 0;
 }
 
@@ -65,9 +85,10 @@ int dynaswap_write(sector_t sector, struct page *page) {
     log_debug("getting write slot (sector = %llu)", sector);
     down_write(&CONTEXT.work_sem);
 
-    ret = get_write_slot(sector, &write_slot);
+    ret = reserve_slot(sector, &write_slot);
     if (ret) {
         log_err("failed to get write slot for sector (sector = %llu, err = %pe)", sector, ERR_PTR(ret));
+        up_write(&CONTEXT.work_sem);
         return ret;
     }
 

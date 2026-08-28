@@ -29,6 +29,7 @@ static void dynaswap_extend(struct work_struct *work) {
     unsigned long current_slots = get_total_slots();
     unsigned long new_slots = CHUNK_SIZE >> PAGE_SHIFT;
 
+    log_debug("extending backing file (new slots = %lu)", new_slots);
     down_write(&CONTEXT.work_sem);
     int status = extend_storage(current_slots, new_slots);
     if (status < 0) {
@@ -38,6 +39,7 @@ static void dynaswap_extend(struct work_struct *work) {
     }
     up_write(&CONTEXT.work_sem);
 
+    log_debug("extending slots (new slots = %lu)", new_slots);
     extend_slots(new_slots);
 }
 
@@ -47,12 +49,12 @@ static void dynaswap_truncate(struct work_struct *work) {}
  * Public Functions
  */
 
-blk_status_t dynaswap_read(sector_t sector, struct page *page) {
+int dynaswap_read(sector_t sector, struct page *page) {
     log_debug("received read operation (sector = %llu)", sector);
-    return BLK_STS_OK;
+    return 0;
 }
 
-blk_status_t dynaswap_write(sector_t sector, struct page *page) {
+int dynaswap_write(sector_t sector, struct page *page) {
     if (slot_manager_needs_extend()) {
         queue_work(DYNASWAP_WORKQUEUE, &CONTEXT.extend_work);
     }
@@ -60,27 +62,29 @@ blk_status_t dynaswap_write(sector_t sector, struct page *page) {
     unsigned long write_slot;
     int ret;
 
+    log_debug("getting write slot (sector = %llu)", sector);
     down_write(&CONTEXT.work_sem);
 
     ret = get_write_slot(sector, &write_slot);
     if (ret) {
         log_err("failed to get write slot for sector (sector = %llu, err = %pe)", sector, ERR_PTR(ret));
-        return errno_to_blk_status(ret);
+        return ret;
     }
 
     up_write(&CONTEXT.work_sem);
 
+    log_debug("writing to slot (slot = %lu)", write_slot);
     ret = write_storage(write_slot, page);
     if (ret) {
         log_err("failed to write to backing storage (slot = %lu, err = %pe)", write_slot, ERR_PTR(ret));
-        return errno_to_blk_status(ret);
+        return ret;
     }
 
-    return BLK_STS_OK;
+    return 0;
 }
 
-blk_status_t dynaswap_discard(void) {
-    return BLK_STS_OK;
+int dynaswap_discard(void) {
+    return 0;
 }
 
 /**

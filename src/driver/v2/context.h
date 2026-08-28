@@ -13,9 +13,9 @@ struct context {
     struct rw_semaphore work_sem;
 };
 
-blk_status_t dynaswap_read(sector_t sector, struct page *page);
-blk_status_t dynaswap_write(sector_t sector, struct page *page);
-blk_status_t dynaswap_discard(void);
+int dynaswap_read(sector_t sector, struct page *page);
+int dynaswap_write(sector_t sector, struct page *page);
+int dynaswap_discard(void);
 
 int setup_context(void);
 void teardown_context(void);

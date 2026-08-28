@@ -4,6 +4,7 @@
 #include <linux/blk-mq.h>
 
 #include "context.h"
+#include "linux/blk_types.h"
 #include "device.h"
 
 /** Block Request Handling
@@ -24,12 +25,13 @@ static void handle_rq(struct work_struct *work) {
     struct work_data *data = container_of(work, struct work_data, work);
 
     struct request *req = data->rq;
-    enum req_op req_operation = req_op(req);
+    enum req_op rop = req_op(req);
 
     struct bio_vec bvec;
     struct req_iterator iter;
 
     blk_status_t status = BLK_STS_OK;
+    int ret = 0;
 
     blk_mq_start_request(req);
 
@@ -37,19 +39,25 @@ static void handle_rq(struct work_struct *work) {
         sector_t sector = iter.iter.bi_sector;
         struct page *page = bvec.bv_page;
 
-        switch (req_operation) {
+        switch (rop) {
             case REQ_OP_WRITE: {
-                dynaswap_write(sector, page);
+                ret = dynaswap_write(sector, page);
                 break;
             }
             case REQ_OP_READ: {
-                dynaswap_read(sector, page);
+                ret = dynaswap_read(sector, page);
                 break;
             }
             default: {
-                log_alert("received unknown operation (req_operation = %d)", req_operation);
+                log_alert("received unknown operation (req_operation = %d)", rop);
+                ret = -EIO;
                 break;
             }
+        }
+
+        if (unlikely(ret < 0)) {
+            status = errno_to_blk_status(ret);
+            break;
         }
     }
 

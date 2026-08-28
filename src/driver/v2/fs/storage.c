@@ -93,18 +93,26 @@ void teardown_storage(void) {
     if (STORAGE_CONTEXT.backing_file && !IS_ERR(STORAGE_CONTEXT.backing_file)) {
         struct inode *inode = file_inode(STORAGE_CONTEXT.backing_file);
 
+        log_debug("removing write protection to backing storage");
         if (inode) {
             inode_lock(inode);
-            inode->i_flags &= ~S_SWAPFILE;
             put_write_access(inode);
             inode_unlock(inode);
         }
 
+        log_debug("closing backing file");
         filp_close(STORAGE_CONTEXT.backing_file, NULL);
+
+        log_debug("truncating backing file");
+        vfs_truncate(&STORAGE_CONTEXT.backing_file->f_path, 0);
+
         STORAGE_CONTEXT.backing_file = NULL;
     }
 
+    log_debug("clearing storage context");
     memset(&STORAGE_CONTEXT, 0, sizeof(STORAGE_CONTEXT));
+
+    log_debug("backing file finished teardown");
 }
 
 /**
@@ -121,6 +129,7 @@ int setup_storage(void) {
         return -EINVAL;
     }
 
+    log_debug("opening backing file");
     STORAGE_CONTEXT.backing_file = filp_open(storage_location, STORAGE_OPEN_FLAGS, STORAGE_PERMISSIONS);
     if (IS_ERR(STORAGE_CONTEXT.backing_file)) {
         err = PTR_ERR(STORAGE_CONTEXT.backing_file);
@@ -136,6 +145,7 @@ int setup_storage(void) {
     inode_lock(inode);
 
     // Write access is put in here to not let users randomly modify memory
+    log_debug("locking write access to backing file");
     err = get_write_access(inode);
     if (err) {
         inode_unlock(inode);
@@ -147,5 +157,6 @@ int setup_storage(void) {
 
     inode_unlock(inode);
 
+    log_debug("backing file finished setup");
     return 0;
 }

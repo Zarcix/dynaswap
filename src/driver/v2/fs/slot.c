@@ -57,6 +57,7 @@ void extend_slots(unsigned long new_slots) {
             target_slots = max_slots;
         }
     } while (!atomic_long_try_cmpxchg(&SLOT_MANAGER.total_slots, &old_slots, target_slots));
+    log_debug("extended slots (total slot count = %lu)", target_slots);
 }
 
 int reserve_slot(sector_t sector, unsigned long *slot) {

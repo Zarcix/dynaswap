@@ -18,10 +18,6 @@ module_param_named(chunk_size, CHUNK_SIZE_MB, ushort, S_IRUSR | S_IRGRP | S_IROT
 MODULE_PARM_DESC(chunk_size, "Size of DynaSwap chunks in MB (default: 1024MB)");
 
 /**
- * Helpers
- */
-
-/**
  * Workqueue Functions
  */
 
@@ -29,7 +25,6 @@ static void dynaswap_extend(struct work_struct *work) {
     unsigned long current_slots = get_total_slots();
     unsigned long new_slots = CHUNK_SIZE >> PAGE_SHIFT;
 
-    log_debug("extending backing file (new slots = %lu)", new_slots);
     down_write(&CONTEXT.work_sem);
     int status = extend_storage(current_slots, new_slots);
     if (status < 0) {
@@ -39,7 +34,6 @@ static void dynaswap_extend(struct work_struct *work) {
     }
     up_write(&CONTEXT.work_sem);
 
-    log_debug("extending slots (new slots = %lu)", new_slots);
     extend_slots(new_slots);
 }
 
@@ -81,8 +75,7 @@ int dynaswap_write(sector_t sector, struct page *page) {
 
     unsigned long write_slot;
     int ret;
-
-    log_debug("getting write slot (sector = %llu)", sector);
+ 
     down_write(&CONTEXT.work_sem);
 
     ret = reserve_slot(sector, &write_slot);
@@ -94,7 +87,6 @@ int dynaswap_write(sector_t sector, struct page *page) {
 
     up_write(&CONTEXT.work_sem);
 
-    log_debug("writing to slot (slot = %lu)", write_slot);
     ret = write_storage(write_slot, page);
     if (ret) {
         log_err("failed to write to backing storage (slot = %lu, err = %pe)", write_slot, ERR_PTR(ret));

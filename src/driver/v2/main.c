@@ -1,3 +1,5 @@
+#include "common.h"
+
 #include <linux/module.h>
 
 #include "context.h"
@@ -5,6 +7,11 @@
 
 static int __init init_driver(void) {
     int status;
+
+    status = setup_common();
+    if (status) {
+        return status;
+    }
 
     status = setup_context();
     if (status) {
@@ -23,7 +30,7 @@ static int __init init_driver(void) {
 static void __exit exit_driver(void) {
     teardown_disk();
     teardown_context();
-    return;
+    teardown_common();
 }
 
 module_init(init_driver);

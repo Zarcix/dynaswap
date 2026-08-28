@@ -32,6 +32,8 @@ struct slot_manager {
      * This difference is important since when the storage driver checks for a free slot, it's checking the backing file for space 
      */
     unsigned long *slot_bitmap;
+    unsigned long bitmap_size;
+    unsigned long bitmap_hint;
 
     struct xarray page_to_slot;
     struct xarray slot_to_page;
@@ -39,6 +41,9 @@ struct slot_manager {
     atomic_long_t total_slots;
     atomic_long_t active_slots;
 };
+
+bool slot_manager_needs_extend(int threshold);
+// unsigned long slot_manager_write(sector_t sector);
 
 int setup_slot_manager(void);
 void teardown_slot_manager(void);

@@ -22,30 +22,27 @@ static void dynaswap_truncate(struct work_struct *work) {}
  * Public Functions
  */
 
-void dynaswap_read(void) {}
+blk_status_t dynaswap_read(sector_t sector, struct page *page) {
+    log_debug("received read operation (sector = %llu)", sector);
+    return BLK_STS_OK;
+}
 
-void dynaswap_write(void) {}
+blk_status_t dynaswap_write(sector_t sector, struct page *page) {
+    log_debug("received read operation (sector = %llu)", sector);
+    return BLK_STS_OK;
+}
 
-void dynaswap_discard(void) {}
+blk_status_t dynaswap_discard(void) {
+    return BLK_STS_OK;
+}
 
 /**
  * Cleanup
  */
 
-static void teardown_self_context(void) {
-    if (!CONTEXT.workqueue) {
-        log_debug("workqueue does not exist in self context teardown");
-        return;
-    }
-
-    destroy_workqueue(CONTEXT.workqueue);
-    CONTEXT.workqueue = NULL;
-}
-
 void teardown_context(void) {
     teardown_slot_manager();
     teardown_storage();
-    teardown_self_context();
 }
 
 /**
@@ -53,11 +50,6 @@ void teardown_context(void) {
  */
 
 static int setup_self_context(void) {
-    CONTEXT.workqueue = alloc_workqueue("dynaswap_wq", WORKQUEUE_FLAGS, 0);
-    if (!CONTEXT.workqueue) {
-        return -ENOMEM;
-    }
-
     INIT_WORK(&CONTEXT.extend_work, dynaswap_extend);
     INIT_WORK(&CONTEXT.truncate_work, dynaswap_truncate);
 
@@ -76,7 +68,6 @@ int setup_context(void) {
     status = setup_storage();
     if (status < 0) {
         log_err("failed initializing storage");
-        teardown_self_context();
         return status;
     }
 
@@ -84,7 +75,6 @@ int setup_context(void) {
     if (status < 0) {
         log_err("failed to setup slot manager");
         teardown_storage();
-        teardown_self_context();
         return status;
     }
 

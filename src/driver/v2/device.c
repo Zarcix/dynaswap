@@ -3,19 +3,66 @@
 #include <linux/blkdev.h>
 #include <linux/blk-mq.h>
 
+#include "context.h"
 #include "device.h"
 
-static blk_status_t handle_rq(struct blk_mq_hw_ctx *hw_ctx, const struct blk_mq_queue_data *queue_data) {
-    struct request *req = queue_data->rq;
+struct work_data {
+    struct work_struct work;
+    struct request *rq;
+    bool last;
+};
+
+static void handle_rq(struct work_struct *work) {
+    struct work_data *data = container_of(work, struct work_data, work);
+
+    struct request *req = data->rq;
+    enum req_op req_operation = req_op(req);
+
+    struct bio_vec bvec;
+    struct req_iterator iter;
+
+    blk_status_t status = BLK_STS_OK;
 
     blk_mq_start_request(req);
-    blk_mq_end_request(req, BLK_STS_OK);
+
+    rq_for_each_bvec(bvec, req, iter) {
+        sector_t sector = iter.iter.bi_sector;
+        struct page *page = bvec.bv_page;
+
+        switch (req_operation) {
+            case REQ_OP_WRITE: {
+                dynaswap_write(sector, page);
+                break;
+            }
+            case REQ_OP_READ: {
+                dynaswap_read(sector, page);
+                break;
+            }
+            default: {
+                log_alert("received unknown operation (req_operation = %d)", req_operation);
+                break;
+            }
+        }
+    }
+
+    blk_mq_end_request(req, status);
+    kfree(data);
+}
+
+static blk_status_t queue_rq(struct blk_mq_hw_ctx *hw_ctx, const struct blk_mq_queue_data *queue_data) {
+    struct work_data *data = kmalloc(sizeof(struct work_data), GFP_ATOMIC);
+
+    data->rq = queue_data->rq;
+    data->last = queue_data->last;
+
+    INIT_WORK(&data->work, handle_rq);
+    queue_work(DYNASWAP_WORKQUEUE, &data->work);
 
     return BLK_STS_OK;
 }
 
 static const struct blk_mq_ops MQ_OPS = {
-    .queue_rq = handle_rq,
+    .queue_rq = queue_rq,
 };
 
 /** Device Registration

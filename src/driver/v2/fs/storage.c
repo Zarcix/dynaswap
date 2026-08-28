@@ -22,11 +22,11 @@ MODULE_PARM_DESC(path, "Path to the backing file");
 
 int extend_storage(unsigned long current_slots, unsigned long added_slots) {
     loff_t offset = (loff_t)(current_slots << PAGE_SHIFT);
-    
+
     loff_t len = (loff_t)(added_slots << PAGE_SHIFT);
 
     int ret = vfs_fallocate(STORAGE_CONTEXT.backing_file, 0, offset, len);
-    
+
     if (unlikely(ret < 0)) {
         log_err("failed to extend backing storage (offset = %lld, len = %lld, err = %pe)",
                 (long long)offset, (long long)len, ERR_PTR(ret));
@@ -121,8 +121,6 @@ int setup_storage(void) {
         return -EINVAL;
     }
 
-    init_rwsem(&STORAGE_CONTEXT.work_sem);
-
     STORAGE_CONTEXT.backing_file = filp_open(storage_location, STORAGE_OPEN_FLAGS, STORAGE_PERMISSIONS);
     if (IS_ERR(STORAGE_CONTEXT.backing_file)) {
         err = PTR_ERR(STORAGE_CONTEXT.backing_file);
@@ -146,9 +144,6 @@ int setup_storage(void) {
         STORAGE_CONTEXT.backing_file = NULL;
         return err;
     }
-
-    // This is here to give the file the same perms as a normal swap file, like rm denial
-    inode->i_flags |= S_SWAPFILE;
 
     inode_unlock(inode);
 

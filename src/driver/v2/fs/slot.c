@@ -10,28 +10,110 @@
 
 static struct slot_manager SLOT_MANAGER = {0};
 
-bool slot_manager_needs_extend(int threshold) {
+/**
+ * Module Arguments
+ */
+
+unsigned char EXTEND_THRESHOLD_PERCENT = 80;
+module_param_named(extend_threshold, EXTEND_THRESHOLD_PERCENT, byte, S_IRUSR | S_IRGRP | S_IROTH);
+MODULE_PARM_DESC(extend_threshold, "Percent where DynaSwap's backing file will self inflate (default: 80%)");
+
+/**
+ * Helpers
+ */
+
+bool slot_manager_needs_extend(void) {
     unsigned long total = atomic_long_read(&SLOT_MANAGER.total_slots);
     unsigned long active = atomic_long_read(&SLOT_MANAGER.active_slots);
 
-    if (total == active) {
-        return true;
+    if (total == 0) {
+        return false;
     }
 
     unsigned long usage_percentage = (active * 100) / total;
-    return usage_percentage >= threshold;
+    return usage_percentage >= EXTEND_THRESHOLD_PERCENT;
 }
 
-// unsigned long slot_manager_write(sector_t sector) {
-//     unsigned long page = (unsigned long)(sector >> SECTORS_PER_PAGE_SHIFT);
+unsigned long get_total_slots(void) {
+    return atomic_long_read(&SLOT_MANAGER.total_slots);
+}
 
-//     // Check if the page has already been allocated. If it has, we will overwrite the page.
-//     void *potential_slot = xa_load(&SLOT_MANAGER.page_to_slot, page);
-//     if (xa_is_value(potential_slot)) {
-//         return xa_to_value(potential_slot);
-//     }
+/**
+ * Slot Functionality
+ */
 
-// }
+void extend_slots(unsigned long new_slots) {
+    long old_slots = atomic_long_read(&SLOT_MANAGER.total_slots);
+    long max_slots = SLOT_MANAGER.bitmap_size;
+
+    long target_slots;
+    do {
+        if (old_slots >= max_slots) {
+            break;
+        }
+
+        target_slots = old_slots + new_slots;
+        if (target_slots > max_slots) {
+            target_slots = max_slots;
+        }
+    } while (!atomic_long_try_cmpxchg(&SLOT_MANAGER.total_slots, &old_slots, target_slots));
+}
+
+int get_write_slot(sector_t sector, unsigned long *slot) {
+    unsigned long page = sector >> SECTORS_PER_PAGE_SHIFT;
+
+    // If page has ever been allocated before, reuse allocation
+    void *potential_slot = xa_load(&SLOT_MANAGER.page_to_slot, page);
+    if (xa_is_value(potential_slot)) {
+        *slot = xa_to_value(potential_slot);
+        return 0;
+    }
+
+    // This page has never been allocated before, need to find free slot
+    unsigned long total_slots = atomic_long_read(&SLOT_MANAGER.total_slots);
+    unsigned long free_slot = find_next_zero_bit(SLOT_MANAGER.slot_bitmap, total_slots, SLOT_MANAGER.bitmap_hint);
+    if (free_slot >= total_slots) {
+        free_slot = find_next_zero_bit(SLOT_MANAGER.slot_bitmap, total_slots, 0);
+    }
+
+    if (free_slot >= total_slots) {
+        pr_err("no free slots found. (total slots = %lu, used slots = %lu)", total_slots, atomic_long_read(&SLOT_MANAGER.active_slots));
+        return -ENOSPC;
+    }
+
+    // Free slot found, set bitmap first
+    set_bit(free_slot, SLOT_MANAGER.slot_bitmap);
+    SLOT_MANAGER.bitmap_hint = (free_slot + 1) % total_slots;
+    
+    // Update BiMap with both values
+    void *xa_page = xa_mk_value(page);
+    void *xa_slot = xa_mk_value(free_slot);
+
+    int ret;
+
+    ret = xa_err(xa_store(&SLOT_MANAGER.page_to_slot, page, xa_slot, GFP_KERNEL));
+    if (unlikely(ret)) {
+        pr_err("failed to store data to page_to_slot map (page = %lu, slot = %lu)", page, free_slot);
+        clear_bit(free_slot, SLOT_MANAGER.slot_bitmap);
+        return ret;
+    }
+
+    xa_store(&SLOT_MANAGER.slot_to_page, free_slot, xa_page, GFP_KERNEL);
+    if (unlikely(ret)) {
+        pr_err("failed to store data to slot_to_page map (slot = %lu, page = %lu)",free_slot ,page);
+        xa_erase(&SLOT_MANAGER.page_to_slot, page);
+        clear_bit(free_slot, SLOT_MANAGER.slot_bitmap);
+        return ret;
+    }
+
+    atomic_long_inc(&SLOT_MANAGER.active_slots);
+
+    return 0;
+}
+
+/**
+ * Initialization
+ */
 
 int setup_slot_manager(void) {
     log_debug("setting up slot manager");
@@ -62,6 +144,5 @@ int setup_slot_manager(void) {
 void teardown_slot_manager(void){ 
     xa_destroy(&SLOT_MANAGER.slot_to_page);
     xa_destroy(&SLOT_MANAGER.page_to_slot);
-
     kvfree(SLOT_MANAGER.slot_bitmap);
 }

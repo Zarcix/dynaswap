@@ -9,8 +9,6 @@
 
 struct storage_context {
     struct file *backing_file;
-
-    struct rw_semaphore work_sem;
 };
 
 int extend_storage(unsigned long current_slots, unsigned long added_slots);

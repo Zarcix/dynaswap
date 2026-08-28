@@ -6,6 +6,14 @@
 #include "context.h"
 #include "device.h"
 
+/** Block Request Handling
+ * 
+ * This section covers the handling of a request that comes in from the kernel.
+ * This essentially wraps the request into a queue so it's asynchronous. Actual
+ * request handling happens in the context file.
+ */
+
+
 struct work_data {
     struct work_struct work;
     struct request *rq;
@@ -51,6 +59,9 @@ static void handle_rq(struct work_struct *work) {
 
 static blk_status_t queue_rq(struct blk_mq_hw_ctx *hw_ctx, const struct blk_mq_queue_data *queue_data) {
     struct work_data *data = kmalloc(sizeof(struct work_data), GFP_ATOMIC);
+    if (!data) {
+        return BLK_STS_RESOURCE;
+    }
 
     data->rq = queue_data->rq;
     data->last = queue_data->last;

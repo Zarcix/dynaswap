@@ -42,8 +42,18 @@ struct slot_manager {
     atomic_long_t active_slots;
 };
 
-bool slot_manager_needs_extend(int threshold);
-// unsigned long slot_manager_write(sector_t sector);
+/* Helpers */
+
+bool slot_manager_needs_extend(void);
+unsigned long get_total_slots(void);
+
+/* Slot Functionality */
+
+void extend_slots(unsigned long new_slots);
+int get_write_slot(sector_t sector, unsigned long *slot);
+
+
+/* Init */
 
 int setup_slot_manager(void);
 void teardown_slot_manager(void);

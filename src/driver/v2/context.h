@@ -4,10 +4,13 @@
 #include <linux/blk_types.h>
 #include <linux/workqueue.h>
 
+#define CHUNK_SIZE ((unsigned long)(CHUNK_SIZE_MB * 1024 * 1024))
+
 struct context {
     struct work_struct extend_work;
     struct work_struct truncate_work;
 
+    struct rw_semaphore work_sem;
 };
 
 blk_status_t dynaswap_read(sector_t sector, struct page *page);

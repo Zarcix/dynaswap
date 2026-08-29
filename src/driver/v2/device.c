@@ -21,25 +21,24 @@ struct work_data {
     bool last;
 };
 
-static void handle_rq(struct work_struct *work) {
-    struct work_data *data = container_of(work, struct work_data, work);
-
-    struct request *req = data->rq;
-    enum req_op rop = req_op(req);
-
+static blk_status_t perform_rq(enum req_op request_op, struct request *request) {
     struct bio_vec bvec;
     struct req_iterator iter;
 
     blk_status_t status = BLK_STS_OK;
     int ret = 0;
 
-    blk_mq_start_request(req);
+    if (REQ_OP_DISCARD == request_op) {
+        ret = dynaswap_discard();
+        status = errno_to_blk_status(ret);
+        return status;
+    }
 
-    rq_for_each_bvec(bvec, req, iter) {
+    rq_for_each_bvec(bvec, request, iter) {
         sector_t sector = iter.iter.bi_sector;
         struct page *page = bvec.bv_page;
 
-        switch (rop) {
+        switch (request_op) {
             case REQ_OP_WRITE: {
                 ret = dynaswap_write(sector, page);
                 break;
@@ -49,7 +48,7 @@ static void handle_rq(struct work_struct *work) {
                 break;
             }
             default: {
-                log_alert("received unknown operation (req_operation = %d)", rop);
+                log_alert("received unknown operation (req_operation = %d)", request_op);
                 ret = -EIO;
                 break;
             }
@@ -60,6 +59,19 @@ static void handle_rq(struct work_struct *work) {
             break;
         }
     }
+
+    return status;
+}
+
+static void handle_rq(struct work_struct *work) {
+    struct work_data *data = container_of(work, struct work_data, work);
+
+    struct request *req = data->rq;
+    enum req_op rop = req_op(req);
+
+    blk_mq_start_request(req);
+
+    blk_status_t status = perform_rq(rop, req);
 
     blk_mq_end_request(req, status);
     kfree(data);

@@ -57,7 +57,7 @@ void extend_slots(unsigned long new_slots) {
             target_slots = max_slots;
         }
     } while (!atomic_long_try_cmpxchg(&SLOT_MANAGER.total_slots, &old_slots, target_slots));
-    log_debug("extended slots (total slot count = %lu)", target_slots);
+    log_debug("extended slots (total slot count = %lu)", atomic_long_read(&SLOT_MANAGER.total_slots));
 }
 
 int reserve_slot_sector(sector_t sector, unsigned long *slot) {
@@ -155,8 +155,20 @@ int setup_slot_manager(void) {
     return 0;
 }
 
-void teardown_slot_manager(void){ 
-    xa_destroy(&SLOT_MANAGER.slot_to_page);
+void teardown_slot_manager(void) {
+    unsigned long index;
+    void *entry;
+
+    xa_for_each(&SLOT_MANAGER.page_to_slot, index, entry) {
+        xa_erase(&SLOT_MANAGER.page_to_slot, index);
+    }
     xa_destroy(&SLOT_MANAGER.page_to_slot);
+
+    xa_for_each(&SLOT_MANAGER.slot_to_page, index, entry) {
+        xa_erase(&SLOT_MANAGER.slot_to_page, index);
+    }
+    xa_destroy(&SLOT_MANAGER.slot_to_page);
+
     kvfree(SLOT_MANAGER.slot_bitmap);
+    log_debug("slot manager torn down successfully");
 }

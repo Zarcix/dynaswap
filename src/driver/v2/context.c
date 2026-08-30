@@ -96,8 +96,23 @@ int dynaswap_write(sector_t sector, struct page *page) {
     return 0;
 }
 
-int dynaswap_discard(void) {
-    return 0;
+int dynaswap_discard(sector_t start, unsigned int count) {
+    int ret;
+    down_write(&CONTEXT.work_sem);
+
+    ret = clear_slot_sector_range(start, count);
+    if (unlikely(ret)) {
+        log_err("failed to discard sector range (start = %llu, count = %u)", start, count);
+        up_write(&CONTEXT.work_sem);
+        return ret;
+    }
+
+    up_write(&CONTEXT.work_sem);
+
+    // we don't holepunch a file because it would just take more cycles.
+    // if the space is truly empty, we will truncate it instead
+
+    return ret;
 }
 
 /**

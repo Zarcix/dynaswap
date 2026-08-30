@@ -125,6 +125,32 @@ int find_slot_sector(sector_t sector, unsigned long *slot) {
     return -ENOENT;
 }
 
+int clear_slot_sector_range(sector_t sector, unsigned int count) {
+    unsigned long start_page = sector >> SECTORS_PER_PAGE_SHIFT;
+    unsigned long end_page = (sector + count + (1 << SECTORS_PER_PAGE_SHIFT) - 1) >> SECTORS_PER_PAGE_SHIFT;
+
+    unsigned long page;
+    for (page = start_page; page < end_page; page++) {
+        void *potential_slot = xa_load(&SLOT_MANAGER.page_to_slot, page);
+        if (!xa_is_value(potential_slot)) {
+            continue;
+        }
+
+        unsigned long slot = xa_to_value(potential_slot);
+
+        xa_erase(&SLOT_MANAGER.page_to_slot, page);
+        xa_erase(&SLOT_MANAGER.slot_to_page, slot);
+
+        if (test_and_clear_bit(slot, SLOT_MANAGER.slot_bitmap)) {
+            atomic_long_dec(&SLOT_MANAGER.active_slots);
+        }
+    }
+
+    log_debug("cleared slot range (start = %lu, end = %lu)", start_page, end_page);
+
+    return 0;
+}
+
 /**
  * Initialization
  */

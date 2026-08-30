@@ -29,7 +29,10 @@ static blk_status_t perform_rq(enum req_op request_op, struct request *request) 
     int ret = 0;
 
     if (REQ_OP_DISCARD == request_op) {
-        ret = dynaswap_discard();
+        sector_t start_sector = blk_rq_pos(request);
+        unsigned int sector_count = blk_rq_sectors(request);
+
+        ret = dynaswap_discard(start_sector, sector_count);
         status = errno_to_blk_status(ret);
         return status;
     }

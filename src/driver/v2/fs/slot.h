@@ -52,6 +52,7 @@ unsigned long get_total_slots(void);
 void extend_slots(unsigned long new_slots);
 int reserve_slot_sector(sector_t sector, unsigned long *slot);
 int find_slot_sector(sector_t sector, unsigned long *slot);
+int clear_slot_sector_range(sector_t sector, unsigned int count);
 
 /* Init */
 

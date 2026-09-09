@@ -1,11 +1,12 @@
 #ifndef FS_STORAGE_H
 #define FS_STORAGE_H
 
-#define STORAGE_OPEN_FLAGS (O_DIRECT | O_RDWR | O_CREAT | O_TRUNC | O_LARGEFILE)
-#define STORAGE_PERMISSIONS (S_IRUSR | S_IWUSR)
-
+#include <linux/blkdev.h>
 #include <linux/fs.h>
 #include <linux/rwsem.h>
+
+#define STORAGE_OPEN_FLAGS O_DIRECT | O_RDWR | O_CREAT | O_TRUNC | O_LARGEFILE
+#define STORAGE_PERMISSIONS S_IRUSR | S_IWUSR
 
 extern struct storage_context STORAGE_CONTEXT;
 

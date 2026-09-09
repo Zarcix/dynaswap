@@ -3,15 +3,16 @@
 
 #define DEBUG
 
-#define log_err(fmt, ...) pr_err("dynaswap::%s -- " fmt "\n", __FILE__, ##__VA_ARGS__)
-#define log_debug(fmt, ...) pr_debug("dynaswap::%s -- " fmt "\n", __FILE__, ##__VA_ARGS__)
-#define log_info(fmt, ...) pr_info("dynaswap::%s -- " fmt "\n", __FILE__, ##__VA_ARGS__)
-#define log_alert(fmt, ...) pr_alert("dynaswap::%s -- " fmt "\n", __FILE__, ##__VA_ARGS__)
-
 #include <linux/compiler.h>
 #include <linux/debugfs.h>
 #include <linux/printk.h>
 #include <linux/types.h>
+
+#define log_err(fmt, ...) pr_err("dynaswap::%s -- " fmt "\n", __FILE__, ##__VA_ARGS__)
+#define log_debug(fmt, ...) pr_debug("dynaswap::%s -- " fmt "\n", __FILE__, ##__VA_ARGS__)
+#define log_info(fmt, ...) pr_info("dynaswap::%s -- " fmt "\n", __FILE__, ##__VA_ARGS__)
+#define log_alert(fmt, ...) pr_alert("dynaswap::%s -- " fmt "\n", __FILE__, ##__VA_ARGS__)
+#define log_emerg(fmt, ...) pr_emerg("dynaswap::%s -- " fmt "\n", __FILE__, ##__VA_ARGS__)
 
 #define WORKQUEUE_FLAGS (WQ_MEM_RECLAIM | WQ_HIGHPRI | WQ_UNBOUND)
 #define DEBUGFS_FLAGS (S_IRUSR | S_IRGRP | S_IROTH)

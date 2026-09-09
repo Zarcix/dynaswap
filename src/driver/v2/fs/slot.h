@@ -42,6 +42,12 @@ struct slot_manager {
     atomic_long_t active_slots;
 };
 
+extern struct slot_manager SLOT_MANAGER;
+
+/* Module Arguments */
+
+extern unsigned char EXTEND_THRESHOLD_PERCENT;
+
 /* Helpers */
 
 bool slot_manager_needs_extend(void);

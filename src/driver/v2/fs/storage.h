@@ -7,6 +7,8 @@
 #include <linux/fs.h>
 #include <linux/rwsem.h>
 
+extern struct storage_context STORAGE_CONTEXT;
+
 struct storage_context {
     struct file *backing_file;
 };

@@ -6,9 +6,10 @@
 
 #include "device.h"
 
+#include "fs/slot_debug.h"
 #include "fs/slot.h"
 
-static struct slot_manager SLOT_MANAGER = {0};
+struct slot_manager SLOT_MANAGER = {0};
 
 /**
  * Module Arguments
@@ -177,6 +178,8 @@ int setup_slot_manager(void) {
 
     atomic_long_set(&SLOT_MANAGER.total_slots, 0);
     atomic_long_set(&SLOT_MANAGER.active_slots, 0);
+
+    setup_slot_debug();
 
     return 0;
 }

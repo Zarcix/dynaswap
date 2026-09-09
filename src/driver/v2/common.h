@@ -14,6 +14,7 @@
 #include <linux/types.h>
 
 #define WORKQUEUE_FLAGS (WQ_MEM_RECLAIM | WQ_HIGHPRI | WQ_UNBOUND)
+#define DEBUGFS_FLAGS (S_IRUSR | S_IRGRP | S_IROTH)
 
 extern struct workqueue_struct *DYNASWAP_WORKQUEUE;
 extern struct dentry *DYNASWAP_SYSFS_DIR;

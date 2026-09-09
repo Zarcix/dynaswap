@@ -4,9 +4,10 @@
 #include <linux/fs.h>
 #include <linux/blkdev.h>
 
-#include "storage.h"
+#include "fs/storage.h"
+#include "fs/storage_debug.h"
 
-static struct storage_context STORAGE_CONTEXT = {0};
+struct storage_context STORAGE_CONTEXT = {0};
 
 /**
  * Module Arguments
@@ -156,6 +157,8 @@ int setup_storage(void) {
     }
 
     inode_unlock(inode);
+
+    setup_storage_debug();
 
     log_debug("backing file finished setup");
     return 0;

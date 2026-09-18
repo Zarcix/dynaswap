@@ -4,7 +4,7 @@
 #include "linux/types.h"
 
 #define BLKDEV_NAME "dynaswap"
-#define BLOCK_CAPACITY (BLOCK_CAPACITY_GB * 1024ULL * 1024ULL * 2ULL)
+#define BLOCK_CAPACITY (BLOCK_CAPACITY_GB * 1024ULL * 1024ULL * 1024ULL)
 
 extern ullong BLOCK_CAPACITY_GB;
 

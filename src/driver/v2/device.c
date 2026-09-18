@@ -207,20 +207,8 @@ static bool create_disk(void) {
 
     log_debug("disk information updated");
 
-    /** Configure Discard
-     * This is commented out since the queue limits *should* cover this.
-     * It may be added back in if this is completely borked and required.
-
-        DYNASWAP_DISK->queue->limits.max_discard_sectors = UINT_MAX;
-        DYNASWAP_DISK->queue->limits.max_hw_discard_sectors = UINT_MAX;
-        DYNASWAP_DISK->queue->limits.discard_granularity = PAGE_SIZE;
-
-        log_debug("discard configured");
-
-    **/
-
-    // Set Capacity
-    set_capacity(DYNASWAP_DISK, BLOCK_CAPACITY);
+    // The capacity here expects a sector count, not a actual disk size
+    set_capacity(DYNASWAP_DISK, BLOCK_CAPACITY >> SECTOR_SHIFT);
 
     log_debug("block capacity updated. (capacity = %llu, sectors = %llu)", BLOCK_CAPACITY_GB, BLOCK_CAPACITY);
 

@@ -1,7 +1,7 @@
 # export LLVM = 1
 
 obj-m := dynaswap.o
-dynaswap-y := main.o device.o context.o common.o fs/storage.o fs/slot.o fs/slot_debug.o fs/storage_debug.o
+dynaswap-y := main.o device.o context.o common.o fs/storage.o fs/slot.o fs/slot_debug.o fs/storage_debug.o utils/bimap.o
 
 ccflags-y := -I$(src)/
 

@@ -22,9 +22,8 @@ MODULE_PARM_DESC(path, "Path to the backing file");
  */
 
 int extend_storage(unsigned long current_slots, unsigned long added_slots) {
-    loff_t offset = (loff_t)(current_slots << PAGE_SHIFT);
-
-    loff_t len = (loff_t)(added_slots << PAGE_SHIFT);
+    loff_t offset = (loff_t)(current_slots) << PAGE_SHIFT;
+    loff_t len = (loff_t)(added_slots) << PAGE_SHIFT;
 
     int ret = vfs_fallocate(STORAGE_CONTEXT.backing_file, 0, offset, len);
 
@@ -40,7 +39,7 @@ int extend_storage(unsigned long current_slots, unsigned long added_slots) {
 void truncate_storage(void) {}
 
 int read_storage(unsigned long slot, struct page *dest) {
-    loff_t offset = (loff_t)(slot << PAGE_SHIFT);
+    loff_t offset = (loff_t)(slot) << PAGE_SHIFT;
 
     void *kpage = kmap_local_page(dest);
     
@@ -64,11 +63,14 @@ int read_storage(unsigned long slot, struct page *dest) {
 }
 
 int write_storage(unsigned long slot, struct page *src) {
-    loff_t offset = (loff_t)(slot << PAGE_SHIFT);
+    loff_t offset = (loff_t)(slot) << PAGE_SHIFT;
 
     void *kpage = kmap_local_page(src);
 
     ssize_t ret = kernel_write(STORAGE_CONTEXT.backing_file, kpage, PAGE_SIZE, &offset);
+
+    kunmap_local(kpage);
+
     if (unlikely(ret != PAGE_SIZE)) {
         long err = (ret < 0) ? ret : -EIO;
         log_err(
@@ -77,11 +79,11 @@ int write_storage(unsigned long slot, struct page *src) {
             ret,
             ERR_PTR(err)
         );
-        kunmap_local(kpage);
         return (int)err;
     }
 
-    kunmap_local(kpage);
+    int sync_err = vfs_fsync_range(STORAGE_CONTEXT.backing_file, offset - PAGE_SIZE, offset - 1, 1);
+    if (unlikely(sync_err)) return sync_err;
 
     return 0;
 }

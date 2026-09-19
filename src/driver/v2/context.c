@@ -13,7 +13,7 @@ static struct context CONTEXT = {0};
  * Module Arguments
  */
 
-unsigned short int CHUNK_SIZE_MB = 1024UL;
+unsigned short int CHUNK_SIZE_MB = 1024;
 module_param_named(chunk_size, CHUNK_SIZE_MB, ushort, S_IRUSR | S_IRGRP | S_IROTH);
 MODULE_PARM_DESC(chunk_size, "Size of DynaSwap chunks in MB (default: 1024MB)");
 
@@ -24,17 +24,15 @@ MODULE_PARM_DESC(chunk_size, "Size of DynaSwap chunks in MB (default: 1024MB)");
 static void dynaswap_extend(struct work_struct *work) {
     unsigned long current_slots = get_total_slots();
     unsigned long new_slots = CHUNK_SIZE >> PAGE_SHIFT;
+    log_debug("new slot: %lu", new_slots);
 
-    down_write(&CONTEXT.work_sem);
+    extend_slots(new_slots);
+
     int status = extend_storage(current_slots, new_slots);
     if (status < 0) {
         log_err("failed to extend storage file (current slot count = %lu, attempted new count = %lu)", current_slots, current_slots + new_slots);
-        up_write(&CONTEXT.work_sem);
         return;
     }
-    up_write(&CONTEXT.work_sem);
-
-    extend_slots(new_slots);
 }
 
 static void dynaswap_truncate(struct work_struct *work) {}
@@ -44,20 +42,18 @@ static void dynaswap_truncate(struct work_struct *work) {}
  */
 
 int dynaswap_read(sector_t sector, struct page *page) {
-    down_read(&CONTEXT.work_sem);
-
     unsigned long slot;
     int ret;
     
-    // This isn't really an error. If find_slot fails, it means it couldn't find a slot. This means that it is an empty page aka a zeroed page.
+    log_debug("reading from sector: %llu", sector);
+
     ret = find_slot_sector(sector, &slot);
+
     if (ret) {
-        up_read(&CONTEXT.work_sem);
         clear_highpage(page);
         return 0;
     }
 
-    up_read(&CONTEXT.work_sem);
 
     ret = read_storage(slot, page);
     if (ret) {
@@ -69,23 +65,30 @@ int dynaswap_read(sector_t sector, struct page *page) {
 }
 
 int dynaswap_write(sector_t sector, struct page *page) {
-    if (slot_manager_needs_extend()) {
-        queue_work(DYNASWAP_WORKQUEUE, &CONTEXT.extend_work);
+    switch (slot_manager_needs_extend()) {
+        case EXTEND_NEEDED:
+            queue_work(DYNASWAP_WORKQUEUE, &CONTEXT.extend_work);
+            break;
+
+        case EXTEND_REQUIRED:
+            log_debug("force extend called, is the swap increment too small?");
+            dynaswap_extend(NULL);
+            break;
+
+        case EXTEND_NOT_NEEDED: default:
+            break;
     }
 
     unsigned long write_slot;
     int ret;
- 
-    down_write(&CONTEXT.work_sem);
 
     ret = reserve_slot_sector(sector, &write_slot);
+
     if (ret) {
         log_err("failed to get write slot for sector (sector = %llu, err = %pe)", sector, ERR_PTR(ret));
-        up_write(&CONTEXT.work_sem);
         return ret;
     }
 
-    up_write(&CONTEXT.work_sem);
 
     ret = write_storage(write_slot, page);
     if (ret) {
@@ -98,16 +101,14 @@ int dynaswap_write(sector_t sector, struct page *page) {
 
 int dynaswap_discard(sector_t start, unsigned int count) {
     int ret;
-    down_write(&CONTEXT.work_sem);
 
     ret = clear_slot_sector_range(start, count);
+
     if (unlikely(ret)) {
         log_err("failed to discard sector range (start = %llu, count = %u)", start, count);
-        up_write(&CONTEXT.work_sem);
         return ret;
     }
 
-    up_write(&CONTEXT.work_sem);
 
     // we don't holepunch a file because it would just take more cycles.
     // if the space is truly empty, we will truncate it instead
@@ -132,7 +133,6 @@ static int setup_self_context(void) {
     INIT_WORK(&CONTEXT.extend_work, dynaswap_extend);
     INIT_WORK(&CONTEXT.truncate_work, dynaswap_truncate);
 
-    init_rwsem(&CONTEXT.work_sem);
     return 0;
 }
 

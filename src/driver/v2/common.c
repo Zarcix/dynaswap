@@ -7,7 +7,7 @@ struct workqueue_struct *DYNASWAP_WORKQUEUE = NULL;
 struct dentry *DYNASWAP_SYSFS_DIR = NULL;
 
 int setup_common(void) {
-    DYNASWAP_WORKQUEUE = alloc_workqueue("dynaswap_wq", WORKQUEUE_FLAGS, 0);
+    DYNASWAP_WORKQUEUE = alloc_ordered_workqueue("dynaswap_wq", WORKQUEUE_FLAGS);
     if (!DYNASWAP_WORKQUEUE) {
         return -ENOMEM;
     }

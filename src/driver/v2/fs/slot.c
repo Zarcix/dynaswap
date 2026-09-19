@@ -15,24 +15,24 @@ struct slot_manager SLOT_MANAGER = {0};
  * Module Arguments
  */
 
-unsigned char EXTEND_THRESHOLD_PERCENT = 80;
+unsigned char EXTEND_THRESHOLD_PERCENT = 50;
 module_param_named(extend_threshold, EXTEND_THRESHOLD_PERCENT, byte, S_IRUSR | S_IRGRP | S_IROTH);
-MODULE_PARM_DESC(extend_threshold, "Percent where DynaSwap's backing file will self inflate (default: 80%)");
+MODULE_PARM_DESC(extend_threshold, "Percent where DynaSwap's backing file will self inflate (default: 50%)");
 
 /**
  * Helpers
  */
 
-bool slot_manager_needs_extend(void) {
+extend_status slot_manager_needs_extend(void) {
     unsigned long total = atomic_long_read(&SLOT_MANAGER.total_slots);
     unsigned long active = atomic_long_read(&SLOT_MANAGER.active_slots);
 
-    if (total == 0) {
-        return false;
+    if (total == 0 || total == active) {
+        return EXTEND_REQUIRED;
     }
 
     unsigned long usage_percentage = (active * 100) / total;
-    return usage_percentage >= EXTEND_THRESHOLD_PERCENT;
+    return usage_percentage >= EXTEND_THRESHOLD_PERCENT ? EXTEND_NEEDED : EXTEND_NOT_NEEDED;
 }
 
 unsigned long get_total_slots(void) {
@@ -63,10 +63,9 @@ void extend_slots(unsigned long new_slots) {
 
 int reserve_slot_sector(sector_t sector, unsigned long *slot) {
     if (find_slot_sector(sector, slot) == 0) {
+        log_debug("reusing reserved slot %lu", *slot);
         return 0;
     }
-
-    unsigned long page = sector >> SECTORS_PER_PAGE_SHIFT;
 
     // This page has never been allocated before, need to find free slot
     unsigned long total_slots = atomic_long_read(&SLOT_MANAGER.total_slots);
@@ -76,36 +75,20 @@ int reserve_slot_sector(sector_t sector, unsigned long *slot) {
     }
 
     if (free_slot >= total_slots) {
-        pr_err("no free slots found. (total slots = %lu, used slots = %lu)", total_slots, atomic_long_read(&SLOT_MANAGER.active_slots));
+        log_err("no free slots found. (total slots = %lu, used slots = %lu)", total_slots, atomic_long_read(&SLOT_MANAGER.active_slots));
         return -ENOSPC;
     }
 
     // Free slot found, set bitmap first
     set_bit(free_slot, SLOT_MANAGER.slot_bitmap);
     SLOT_MANAGER.bitmap_hint = (free_slot + 1) % total_slots;
-    
-    // Update BiMap with both values
-    void *xa_page = xa_mk_value(page);
-    void *xa_slot = xa_mk_value(free_slot);
-
-    int ret;
-
-    ret = xa_err(xa_store(&SLOT_MANAGER.page_to_slot, page, xa_slot, GFP_KERNEL));
-    if (unlikely(ret)) {
-        pr_err("failed to store data to page_to_slot map (page = %lu, slot = %lu)", page, free_slot);
-        clear_bit(free_slot, SLOT_MANAGER.slot_bitmap);
-        return ret;
-    }
-
-    ret = xa_err(xa_store(&SLOT_MANAGER.slot_to_page, free_slot, xa_page, GFP_KERNEL));
-    if (unlikely(ret)) {
-        pr_err("failed to store data to slot_to_page map (slot = %lu, page = %lu)",free_slot ,page);
-        xa_erase(&SLOT_MANAGER.page_to_slot, page);
-        clear_bit(free_slot, SLOT_MANAGER.slot_bitmap);
-        return ret;
-    }
-
     atomic_long_inc(&SLOT_MANAGER.active_slots);
+
+    int status = bimap_insert(&SLOT_MANAGER.slot_bimap, sector, free_slot);
+    if (status) {
+        log_debug("failed to insert into bimap (sector = %llu, slot = %lu)", sector, free_slot);
+        return status;
+    }
 
     *slot = free_slot;
 
@@ -113,41 +96,32 @@ int reserve_slot_sector(sector_t sector, unsigned long *slot) {
 }
 
 int find_slot_sector(sector_t sector, unsigned long *slot) {
-    unsigned long page = sector >> SECTORS_PER_PAGE_SHIFT;
-
-    // Find slot if it exists
-    void *potential_slot = xa_load(&SLOT_MANAGER.page_to_slot, page);
-    if (xa_is_value(potential_slot)) {
-        *slot = xa_to_value(potential_slot);
-        return 0;
-    }
-
-    // If it doesn't exist, then we just quit
-    return -ENOENT;
+    return bimap_find_by_sector(&SLOT_MANAGER.slot_bimap, sector, slot);
 }
 
 int clear_slot_sector_range(sector_t sector, unsigned int count) {
-    unsigned long start_page = sector >> SECTORS_PER_PAGE_SHIFT;
-    unsigned long end_page = (sector + count + (1 << SECTORS_PER_PAGE_SHIFT) - 1) >> SECTORS_PER_PAGE_SHIFT;
+    log_debug("sector attempted to clear");
+    // unsigned long start_page = sector >> SECTORS_PER_PAGE_SHIFT;
+    // unsigned long end_page = (sector + count + (1 << SECTORS_PER_PAGE_SHIFT) - 1) >> SECTORS_PER_PAGE_SHIFT;
 
-    unsigned long page;
-    for (page = start_page; page < end_page; page++) {
-        void *potential_slot = xa_load(&SLOT_MANAGER.page_to_slot, page);
-        if (!xa_is_value(potential_slot)) {
-            continue;
-        }
+    // unsigned long page;
+    // for (page = start_page; page < end_page; page++) {
+    //     void *potential_slot = xa_load(&SLOT_MANAGER.page_to_slot, page);
+    //     if (!xa_is_value(potential_slot)) {
+    //         continue;
+    //     }
 
-        unsigned long slot = xa_to_value(potential_slot);
+    //     unsigned long slot = xa_to_value(potential_slot);
 
-        xa_erase(&SLOT_MANAGER.page_to_slot, page);
-        xa_erase(&SLOT_MANAGER.slot_to_page, slot);
+    //     xa_erase(&SLOT_MANAGER.page_to_slot, page);
+    //     xa_erase(&SLOT_MANAGER.slot_to_page, slot);
 
-        if (test_and_clear_bit(slot, SLOT_MANAGER.slot_bitmap)) {
-            atomic_long_dec(&SLOT_MANAGER.active_slots);
-        }
-    }
+    //     if (test_and_clear_bit(slot, SLOT_MANAGER.slot_bitmap)) {
+    //         atomic_long_dec(&SLOT_MANAGER.active_slots);
+    //     }
+    // }
 
-    log_debug("cleared slot range (start = %lu, end = %lu)", start_page, end_page);
+    // log_debug("cleared slot range (start = %lu, end = %lu)", start_page, end_page);
 
     return 0;
 }
@@ -159,11 +133,10 @@ int clear_slot_sector_range(sector_t sector, unsigned int count) {
 int setup_slot_manager(void) {
     log_debug("setting up slot manager");
 
-    // we prealloc the slot bitmap since it's a tiny allocation, no other real reason around it lol
-    SLOT_MANAGER.bitmap_size = (unsigned long)(BLOCK_CAPACITY >> SECTORS_PER_PAGE_SHIFT);
+    SLOT_MANAGER.bitmap_size = (unsigned long)(BLOCK_CAPACITY >> PAGE_SHIFT);
     SLOT_MANAGER.bitmap_hint = 0;
     log_debug("trying to allocate slot bitmap (size = %lu)", SLOT_MANAGER.bitmap_size);
-    SLOT_MANAGER.slot_bitmap = kvmalloc_array(BITS_TO_LONGS(SLOT_MANAGER.bitmap_size), sizeof(unsigned long), GFP_KERNEL);
+    SLOT_MANAGER.slot_bitmap = kvzalloc(bitmap_size(SLOT_MANAGER.bitmap_size), GFP_KERNEL);
 
     if (!SLOT_MANAGER.slot_bitmap) {
         return -ENOMEM;
@@ -171,8 +144,7 @@ int setup_slot_manager(void) {
 
     log_debug("trying to init slot bimap");
 
-    xa_init(&SLOT_MANAGER.page_to_slot);
-    xa_init(&SLOT_MANAGER.slot_to_page);
+    init_bimap(&SLOT_MANAGER.slot_bimap);
 
     log_debug("setting slot sizes to 0");
 
@@ -185,19 +157,7 @@ int setup_slot_manager(void) {
 }
 
 void teardown_slot_manager(void) {
-    unsigned long index;
-    void *entry;
-
-    xa_for_each(&SLOT_MANAGER.page_to_slot, index, entry) {
-        xa_erase(&SLOT_MANAGER.page_to_slot, index);
-    }
-    xa_destroy(&SLOT_MANAGER.page_to_slot);
-
-    xa_for_each(&SLOT_MANAGER.slot_to_page, index, entry) {
-        xa_erase(&SLOT_MANAGER.slot_to_page, index);
-    }
-    xa_destroy(&SLOT_MANAGER.slot_to_page);
-
+    destroy_bimap(&SLOT_MANAGER.slot_bimap);
     kvfree(SLOT_MANAGER.slot_bitmap);
     log_debug("slot manager torn down successfully");
 }

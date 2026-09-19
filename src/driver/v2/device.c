@@ -24,25 +24,21 @@ struct work_data {
 static blk_status_t perform_rq(enum req_op request_op, struct request *request) {
     struct bio_vec bvec;
     struct req_iterator iter;
-
     blk_status_t status = BLK_STS_OK;
-    int ret = 0;
 
     if (REQ_OP_DISCARD == request_op) {
         sector_t start_sector = blk_rq_pos(request);
         unsigned int sector_count = blk_rq_sectors(request);
-
-        ret = dynaswap_discard(start_sector, sector_count);
-        status = errno_to_blk_status(ret);
-        return status;
+        return errno_to_blk_status(dynaswap_discard(start_sector, sector_count));
     }
 
     rq_for_each_bvec(bvec, request, iter) {
         sector_t sector = iter.iter.bi_sector;
         struct page *page = bvec.bv_page;
+        int ret = 0;
 
         switch (request_op) {
-            case REQ_OP_WRITE: {
+            case REQ_OP_WRITE: case REQ_OP_FLUSH: {
                 ret = dynaswap_write(sector, page);
                 break;
             }
@@ -174,11 +170,21 @@ static const struct block_device_operations FILE_OPS = {
 };
 
 static struct queue_limits QUEUE_LIMITS = {
+    // Block Settings
     .logical_block_size = SECTOR_SIZE,
-    .physical_block_size = SECTOR_SIZE,
+    .physical_block_size = PAGE_SIZE,
+
+    // IO Settings
+    .io_min = PAGE_SIZE,
+    .io_opt = PAGE_SIZE,
+
+    // Discard Settings
     .max_discard_sectors = UINT_MAX,
     .max_hw_discard_sectors = UINT_MAX,
     .discard_granularity = SECTOR_SIZE,
+
+    // Extra Features
+    .features = BLK_FEAT_WRITE_CACHE | BLK_FEAT_FUA,
 };
 
 ullong BLOCK_CAPACITY_GB = 128;

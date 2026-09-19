@@ -14,7 +14,7 @@
 #define log_alert(fmt, ...) pr_alert("dynaswap::%s -- " fmt "\n", __FILE__, ##__VA_ARGS__)
 #define log_emerg(fmt, ...) pr_emerg("dynaswap::%s -- " fmt "\n", __FILE__, ##__VA_ARGS__)
 
-#define WORKQUEUE_FLAGS (WQ_MEM_RECLAIM | WQ_HIGHPRI | WQ_UNBOUND)
+#define WORKQUEUE_FLAGS (WQ_MEM_RECLAIM | WQ_HIGHPRI)
 #define DEBUGFS_FLAGS (S_IRUSR | S_IRGRP | S_IROTH)
 
 extern struct workqueue_struct *DYNASWAP_WORKQUEUE;

@@ -24,7 +24,15 @@ A slot represents memory page mapping in the backing file.
 #include <linux/bitmap.h>
 #include <linux/xarray.h>
 
+#include "utils/bimap.h"
+
 #define SECTORS_PER_PAGE_SHIFT (PAGE_SHIFT - SECTOR_SHIFT)
+
+typedef enum {
+    EXTEND_NOT_NEEDED = 0,
+    EXTEND_NEEDED = 1,
+    EXTEND_REQUIRED = 2
+} extend_status;
 
 struct slot_manager {
     /**
@@ -35,8 +43,7 @@ struct slot_manager {
     unsigned long bitmap_size;
     unsigned long bitmap_hint;
 
-    struct xarray page_to_slot;
-    struct xarray slot_to_page;
+    bimap slot_bimap;
 
     atomic_long_t total_slots;
     atomic_long_t active_slots;
@@ -50,7 +57,7 @@ extern unsigned char EXTEND_THRESHOLD_PERCENT;
 
 /* Helpers */
 
-bool slot_manager_needs_extend(void);
+extend_status slot_manager_needs_extend(void);
 unsigned long get_total_slots(void);
 
 /* Slot Functionality */

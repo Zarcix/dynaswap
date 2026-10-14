@@ -1,12 +1,8 @@
-# export LLVM = 1
-
 obj-m := dynaswap.o
-dynaswap-y := main.o device.o context.o common.o fs/storage.o fs/slot.o fs/slot_debug.o fs/storage_debug.o utils/bimap.o
-
-ccflags-y := -I$(src)/
+dynaswap-y := driver.o
 
 all:
-	$(MAKE) -C /lib/modules/$(shell uname -r)/build M=$(shell pwd) CONFIG_DEBUG_INFO_BTF_MODULES= modules
+	$(MAKE) -C /lib/modules/$(shell uname -r)/build M=$(shell pwd) modules
 
 clean:
 	$(MAKE) -C /lib/modules/$(shell uname -r)/build M=$(shell pwd) clean

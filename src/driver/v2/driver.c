@@ -1,3 +1,4 @@
+#include "linux/blk_types.h"
 #define DEBUG
 
 #include <linux/blkdev.h>
@@ -5,10 +6,13 @@
 #include <linux/module.h>
 
 #include "common.h"
+#include "swap.h"
 
 #define BLKDEV_NAME "dynaswap"
 
 /* Request Handles */
+
+static struct swap dynaswap = {0};
 
 static blk_status_t queue_rq(struct blk_mq_hw_ctx *hctx, const struct blk_mq_queue_data *bd) {
     struct request *req = bd->rq;
@@ -20,11 +24,34 @@ static blk_status_t queue_rq(struct blk_mq_hw_ctx *hctx, const struct blk_mq_que
         return BLK_STS_OK;
     }
 
-    sector_t sector = blk_rq_pos(req);
-    sector_t count = blk_rq_sectors(req);
-    enum req_op dir = rq_data_dir(req);
+    enum req_op operation = rq_data_dir(req);
 
-    log_debug("request received (sector = %llu, count = %llu, dir = %u)", sector, count, dir);
+    struct bio_vec bvec;
+    struct req_iterator iter;
+    rq_for_each_segment(bvec, req, iter) {
+        sector_t sector = iter.iter.bi_sector;
+        struct page *page = bvec.bv_page;
+
+        sector_t virtual_slot = sector >> 3;
+
+        switch (operation) {
+            case REQ_OP_READ: {
+                swap_read(&dynaswap, virtual_slot, page);
+                break;
+            }
+
+            case REQ_OP_WRITE: {
+                swap_write(&dynaswap, virtual_slot, page);
+                break;
+            }
+
+            default: {
+                log_alert("unknown operation: %d\n", operation);
+                break;
+            }
+        }
+    }
+
 
     blk_mq_end_request(req, BLK_STS_OK);
 
@@ -112,6 +139,9 @@ static const struct block_device_operations FILE_OPS = {
 };
 
 static struct gendisk *blkdev_disk;
+static uint blkdev_size = 128;
+module_param_named(capacity_gb, blkdev_size, uint, S_IRUSR | S_IRGRP | S_IROTH);
+MODULE_PARM_DESC(capacity_gb, "Capacity of the block device in Gigabytes (default: 128G)");
 
 static void free_disk(void) {
     if (!blkdev_disk) {
@@ -144,14 +174,13 @@ static int init_disk(void) {
 
     snprintf(blkdev_disk->disk_name, 32, BLKDEV_NAME);
 
-    uint size = 1;
-    sector_t sectors = size << 21;
+    sector_t sectors = blkdev_size << 21;
     set_capacity(blkdev_disk, sectors);
 
     int status = add_disk(blkdev_disk);
     if (status) return status;
 
-    log_debug("initialized block disk (sectors = %llu, size = %u)", sectors, size);
+    log_debug("initialized block disk (sectors = %llu, size = %u)", sectors, blkdev_size);
 
     return 0;
 }
@@ -160,6 +189,7 @@ static int init_disk(void) {
 /* Module */
 
 static void __exit mod_exit(void) {
+    free_swap(&dynaswap);
     free_disk();
     free_tagset();
     free_blkdev();
@@ -182,6 +212,11 @@ static int __init mod_init(void) {
     }
 
     err = init_disk();
+    if (err) {
+        return err;
+    }
+
+    err = init_swap(&dynaswap);
     if (err) {
         return err;
     }

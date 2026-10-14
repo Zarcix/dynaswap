@@ -1,5 +1,5 @@
-#ifndef DYNASWAP_COMMON
-#define DYNASWAP_COMMON
+#ifndef COMMON_H
+#define COMMON_H
 
 /*
  * This should only contain stuff that is used LITERALLY everywhere

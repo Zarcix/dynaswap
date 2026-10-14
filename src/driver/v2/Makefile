@@ -1,5 +1,5 @@
 obj-m := dynaswap.o
-dynaswap-y := driver.o
+dynaswap-y := driver.o swap.o
 
 all:
 	$(MAKE) -C /lib/modules/$(shell uname -r)/build M=$(shell pwd) modules

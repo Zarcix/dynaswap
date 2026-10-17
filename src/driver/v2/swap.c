@@ -44,11 +44,19 @@ int swap_read(struct swap *swap, sector_t virtual_slot, struct page *page) {
 }
 
 int init_swap(struct swap *swap) {
+    int status;
+
+    status = init_storage(&swap->store);
+    if (status) return status;
+
     xa_init_flags(&swap->map, GFP_NOIO);
 
     rwlock_init(&swap->swap_lock);
 
     log_debug("initialized swap");
+
+    extend_storage(&swap->store);
+
     return 0;
 }
 
@@ -61,6 +69,8 @@ void free_swap(struct swap *swap) {
     }
 
     xa_destroy(&swap->map);
+
+    free_storage(&swap->store);
 
     log_debug("freed swap");
 }

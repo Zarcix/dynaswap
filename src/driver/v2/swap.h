@@ -3,7 +3,10 @@
 
 #include <linux/xarray.h>
 
+#include "storage.h"
+
 struct swap {
+    struct storage store;
     struct xarray map;
     rwlock_t swap_lock;
 };

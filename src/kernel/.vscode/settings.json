@@ -1,0 +1,4 @@
+{
+    "C_Cpp.default.compileCommands": "/home/personal/Projects/dynaswap/src/kernel/builddir/compile_commands.json",
+    "C_Cpp.default.configurationProvider": "mesonbuild.mesonbuild"
+}

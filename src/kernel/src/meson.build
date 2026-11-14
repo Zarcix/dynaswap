@@ -1,0 +1,1 @@
+executable('dynaswap', 'main.c')

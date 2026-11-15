@@ -11,12 +11,11 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include <uuid/uuid.h>
-#include <stdatomic.h>
 
 #include "swap_handle.h"
 #include "include/swapheader.h"
 
-atomic_int swap_count = 0;
+int swap_count = 0; // If we ever decide to multi thread this, this needs to be atomic
 struct swap_chunk *current_swap = NULL;
 
 uint32_t mkswap_get_last_page(int swapFD) {
@@ -67,7 +66,6 @@ void expand_swap(void) {
         return;
     }
 
-    swap_count++;
     snprintf(path, PATH_MAX, "%s/chunk_%d", SWAP_DIR, swap_count);
 
     FILE *file = fopen(path, "w+");
@@ -106,6 +104,7 @@ void expand_swap(void) {
     chunk->prev_chunk = current_swap;
 
     current_swap = chunk;
+    swap_count++;
 }
 
 void truncate_swap(bool trunc_all) {
@@ -134,6 +133,7 @@ void truncate_swap(bool trunc_all) {
 
     free(old->path);
     free(old);
+
     swap_count--;
 }
 

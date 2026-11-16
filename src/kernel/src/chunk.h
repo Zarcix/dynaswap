@@ -5,7 +5,6 @@
 
 #define SWAP_DIR "/swap"
 #define SWAP_SIZE (256 * 1024 * 1024)
-#define SWAP_PAGE_SIZE 4096
 
 struct swap_chunk {
     char *path;

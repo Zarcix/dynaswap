@@ -1,6 +1,8 @@
 sources = files(
     'main.c',
-    'swap_handle.c'
+    'chunk.c',
+    'swap.c',
+    'include/log.c',
 )
 
 uuid_dep = dependency('uuid')

@@ -10,6 +10,7 @@
 
 #include "include/log.h"
 
+#include "args.h"
 #include "chunk.h"
 #include "swap.h"
 
@@ -23,8 +24,8 @@ void expand_swap(void) {
         return;
     }
 
-    snprintf(path, PATH_MAX, "%s/chunk_%d", SWAP_DIR, swap_count);
-    if (create_swap(path, SWAP_SIZE) != 0) {
+    snprintf(path, PATH_MAX, "%s/chunk_%d", swap_path, swap_count);
+    if (create_swap(path, (long)swap_size << MB_ALLOC_SHIFT) != 0) {
         log_error("failed to create swap %s", path);
         return;
     }

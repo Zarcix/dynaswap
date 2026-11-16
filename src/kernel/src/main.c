@@ -9,6 +9,7 @@
 
 #include "include/log.h"
 
+#include "args.h"
 #include "chunk.h"
 
 #define POLL_PATH "/sys/kernel/mm/swap/pages/event"
@@ -84,7 +85,8 @@ void setup_signals() {
     signal(SIGQUIT, sig_handler);
 }
 
-int main(int argc, char **argv) {
+int main(int argc, const char **argv) {
+    parse_args(argc, argv);
     setup_signals();
     init_swap();
 

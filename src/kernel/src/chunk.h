@@ -3,8 +3,7 @@
 
 #include <stdbool.h>
 
-#define SWAP_DIR "/swap"
-#define SWAP_SIZE (256 * 1024 * 1024)
+#define MB_ALLOC_SHIFT 20
 
 struct swap_chunk {
     char *path;

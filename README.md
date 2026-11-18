@@ -6,7 +6,7 @@ This is the version of dynaswap implementation.
 
 This uses both Pressure Stall Information (PSI) and memory use counts to see when a scale up is needed.
 
-Thresholds for both PSI and memory use are configurable in the `src/misc/dynaswap.conf` file in this repo.
+Thresholds for both PSI and memory use are configurable in the `misc/dynaswap.conf` file in this repo.
 
 ### PSI Monitoring
 

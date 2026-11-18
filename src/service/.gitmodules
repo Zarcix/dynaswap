@@ -1,3 +1,0 @@
-[submodule "public/libconfig"]
-	path = public/libconfig
-	url = git@github.com:hyperrealm/libconfig.git

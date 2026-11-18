@@ -1,0 +1,285 @@
+diff --git a/mm/Makefile b/mm/Makefile
+index 2a3ec53d6..ed54aab2c 100644
+--- a/mm/Makefile
++++ b/mm/Makefile
+@@ -76,7 +76,7 @@ ifdef CONFIG_MMU
+ 	obj-$(CONFIG_ADVISE_SYSCALLS)	+= madvise.o
+ endif
+ 
+-obj-$(CONFIG_SWAP)	+= page_io.o swap_state.o swapfile.o
++obj-$(CONFIG_SWAP)	+= page_io.o swap_state.o swapfile.o swap_capacity.o
+ obj-$(CONFIG_ZSWAP)	+= zswap.o
+ obj-$(CONFIG_HAS_DMA)	+= dmapool.o
+ obj-$(CONFIG_HUGETLBFS)	+= hugetlb.o hugetlb_sysfs.o hugetlb_sysctl.o
+diff --git a/mm/swap_capacity.c b/mm/swap_capacity.c
+new file mode 100644
+index 000000000..5c22f7b73
+--- /dev/null
++++ b/mm/swap_capacity.c
+@@ -0,0 +1,150 @@
++#include "linux/types.h"
++#include <linux/sysfs.h>
++#include <linux/kobject.h>
++#include <linux/printk.h>
++#include <linux/swap.h>
++#include <linux/atomic/atomic-instrumented.h>
++
++#include "swap_capacity.h"
++
++#define SYSFS_DIR_NAME "pages"
++
++static unsigned int extend_threshold = 60;
++static unsigned int truncate_threshold = 30;
++
++static struct kobject *swap_kobject = NULL;
++static atomic_t current_event = ATOMIC_INIT(SWAP_CAPACITY_EVENT_NONE);
++
++static ssize_t truncate_threshold_show(
++    struct kobject *kobj,
++    struct kobj_attribute *attr,
++    char *buf
++) {
++    return sysfs_emit(buf, "%u\n", truncate_threshold);
++}
++
++static ssize_t truncate_threshold_store(
++    struct kobject *kobj,
++    struct kobj_attribute *attr,
++    const char *buf,
++    size_t count
++) {
++    unsigned int value;
++    int ret = kstrtouint(buf, 10, &value);
++    if (ret) {
++        return ret;
++    }
++
++    if (value > 100) {
++        return -EINVAL;
++    }
++
++    WRITE_ONCE(truncate_threshold, value);
++
++    return count;
++}
++
++static ssize_t extend_threshold_show(
++    struct kobject *kobj,
++    struct kobj_attribute *attr,
++    char *buf
++) {
++    return sysfs_emit(buf, "%u\n", extend_threshold);
++}
++
++static ssize_t extend_threshold_store(
++    struct kobject *kobj,
++    struct kobj_attribute *attr,
++    const char *buf,
++    size_t count
++) {
++    unsigned int value;
++    int ret = kstrtouint(buf, 10, &value);
++    if (ret) {
++        return ret;
++    }
++
++    if (value > 100) {
++        return -EINVAL;
++    }
++
++    WRITE_ONCE(extend_threshold, value);
++
++    return count;
++}
++
++static ssize_t free_show(struct kobject *kobj,
++                         struct kobj_attribute *attr,
++                         char *buf)
++{
++    unsigned long free_pages = get_nr_swap_pages();
++    return sysfs_emit(buf, "%lu\n", free_pages);
++}
++
++static ssize_t total_show(struct kobject *kobj,
++                          struct kobj_attribute *attr,
++                          char *buf)
++{
++    return sysfs_emit(buf, "%ld\n", READ_ONCE(total_swap_pages));
++}
++
++static ssize_t event_show(struct kobject *kobj,
++                          struct kobj_attribute *attr,
++                          char *buf)
++{
++    return sysfs_emit(buf, "%d\n", atomic_read(&current_event));
++}
++
++void swap_capacity_callback(enum swap_capacity_event_reason reason) {
++    unsigned long free_pages = get_nr_swap_pages();
++    unsigned long total_pages = READ_ONCE(total_swap_pages);
++
++    unsigned long page_use = total_pages ? ((total_pages - free_pages) * 100) / total_pages : 0;
++
++    enum swap_capacity_event event = SWAP_CAPACITY_EVENT_NONE;
++
++    if (page_use > extend_threshold) {
++        event = SWAP_CAPACITY_EVENT_EXTEND;
++    } else if (page_use < truncate_threshold) {
++        event = SWAP_CAPACITY_EVENT_TRUNC;
++    }
++
++    if (atomic_read(&current_event) == event && reason != SWAP_CAPACITY_TOTAL_CHANGED) {
++        // We have already emited this event, nothing to do
++        return;
++    }
++
++    atomic_set(&current_event, event);
++    sysfs_notify(swap_kobject, SYSFS_DIR_NAME, "event");
++}
++
++static struct kobj_attribute free_attr = __ATTR_RO(free);
++static struct kobj_attribute total_attr = __ATTR_RO(total);
++static struct kobj_attribute event_attr = __ATTR_RO(event);
++
++static struct kobj_attribute extend_threshold_attr = __ATTR_RW(extend_threshold);
++static struct kobj_attribute truncate_threshold_attr= __ATTR_RW(truncate_threshold);
++
++static struct attribute *swap_capacity_attrs[] = {
++    &free_attr.attr,
++    &total_attr.attr,
++    &event_attr.attr,
++    &extend_threshold_attr.attr,
++    &truncate_threshold_attr.attr,
++    NULL,
++};
++
++static const struct attribute_group swap_capacity_attr_group = {
++    .name = SYSFS_DIR_NAME,
++    .attrs = swap_capacity_attrs,
++};
++
++int swap_capacity_init(struct kobject *swap_kobj)
++{
++    int ret = sysfs_create_group(swap_kobj, &swap_capacity_attr_group);
++    if (!ret) {
++        swap_kobject = swap_kobj;
++    }
++
++    return ret;
++}
+\ No newline at end of file
+diff --git a/mm/swap_capacity.h b/mm/swap_capacity.h
+new file mode 100644
+index 000000000..ec128938e
+--- /dev/null
++++ b/mm/swap_capacity.h
+@@ -0,0 +1,28 @@
++// SPDX-License-Identifier: GPL-2.0-only
++/*
++ * swap_capacity.h
++ *
++ * swap capacity management
++ */
++
++#ifndef _LINUX_SWAP_CAPACITY_H
++#define _LINUX_SWAP_CAPACITY_H
++
++#include <linux/kobject.h>
++
++enum swap_capacity_event_reason {
++    SWAP_CAPACITY_USAGE_CHANGED = 0,
++    SWAP_CAPACITY_TOTAL_CHANGED = 1
++};
++
++enum swap_capacity_event {
++    SWAP_CAPACITY_EVENT_NONE = 0,
++    SWAP_CAPACITY_EVENT_EXTEND = 1,
++    SWAP_CAPACITY_EVENT_TRUNC = 2
++};
++
++int swap_capacity_init(struct kobject *swap_kobj);
++
++void swap_capacity_callback(enum swap_capacity_event_reason reason);
++
++#endif /* _LINUX_SWAP_CAPACITY_H */
+\ No newline at end of file
+diff --git a/mm/swap_state.c b/mm/swap_state.c
+index d9e36c505..10e83bb2c 100644
+--- a/mm/swap_state.c
++++ b/mm/swap_state.c
+@@ -27,6 +27,7 @@
+ #include "internal.h"
+ #include "swap_table.h"
+ #include "swap.h"
++#include "swap_capacity.h"
+ 
+ /* Swap readahead cluster size, as a power of 2 pages. */
+ static int page_cluster;
+@@ -1137,6 +1138,13 @@ static int __init swap_sysfs_init(void)
+ 		pr_err("failed to register swap group\n");
+ 		goto delete_obj;
+ 	}
++
++	err = swap_capacity_init(swap_kobj);
++	if (err) {
++		pr_err("failed to register swap capacity\n");
++		goto delete_obj;
++	}
++
+ 	/* Swap cache writeback is LRU based, no tags for it */
+ 	mapping_set_no_writeback_tags(&swap_space);
+ 	return 0;
+diff --git a/mm/swapfile.c b/mm/swapfile.c
+index 254ce86fa..01b88a2b2 100644
+--- a/mm/swapfile.c
++++ b/mm/swapfile.c
+@@ -5,7 +5,6 @@
+  *  Copyright (C) 1991, 1992, 1993, 1994  Linus Torvalds
+  *  Swap reorganised 29.12.95, Stephen Tweedie
+  */
+-
+ #include <linux/blkdev.h>
+ #include <linux/mm.h>
+ #include <linux/sched/mm.h>
+@@ -48,6 +47,7 @@
+ #include "swap_table.h"
+ #include "internal.h"
+ #include "swap.h"
++#include "swap_capacity.h"
+ 
+ static void swap_range_alloc(struct swap_info_struct *si,
+ 			     unsigned int nr_entries);
+@@ -964,6 +964,7 @@ static bool __swap_cluster_alloc_entries(struct swap_info_struct *si,
+ 		ci->order = order;
+ 	ci->count += nr_pages;
+ 	swap_range_alloc(si, nr_pages);
++	swap_capacity_callback(SWAP_CAPACITY_USAGE_CHANGED);
+ 
+ 	return true;
+ }
+@@ -1975,6 +1976,7 @@ void __swap_cluster_free_entries(struct swap_info_struct *si,
+ 
+ 	swap_range_free(si, ci_head + ci_start, nr_pages);
+ 	swap_cluster_assert_empty(ci, ci_start, nr_pages, false);
++	swap_capacity_callback(SWAP_CAPACITY_USAGE_CHANGED);
+ 
+ 	if (!ci->count)
+ 		free_cluster(si, ci);
+@@ -3092,6 +3094,9 @@ static void _enable_swap_info(struct swap_info_struct *si)
+ 
+ 	/* Add back to available list */
+ 	add_to_avail_list(si, true);
++
++	/* Notify swap change */
++	swap_capacity_callback(SWAP_CAPACITY_TOTAL_CHANGED);
+ }
+ 
+ /*
+@@ -3310,6 +3315,7 @@ SYSCALL_DEFINE1(swapoff, const char __user *, specialfile)
+ 	wake_up_interruptible(&proc_poll_wait);
+ 
+ out_dput:
++	swap_capacity_callback(SWAP_CAPACITY_TOTAL_CHANGED);
+ 	filp_close(victim, NULL);
+ 	return err;
+ }
